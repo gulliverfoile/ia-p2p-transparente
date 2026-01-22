@@ -1,0 +1,2297 @@
+#!/usr/bin/env python3
+"""
+Sistema P2P de IA Auditale - "Euskera"
+Arquitectura completa con trazabilidad total, modularidad y transparencia radical
+"""
+
+import hashlib
+import json
+import time
+import uuid
+import random
+import asyncio
+from datetime import datetime
+from typing import Dict, List, Any, Optional, Callable
+from dataclasses import dataclass, asdict
+import numpy as np
+from collections import defaultdict, deque
+import pickle
+import threading
+import queue
+from enum import Enum
+import socket
+import select
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.asymmetric import rsa, padding
+from cryptography.hazmat.primitives import serialization
+
+# ============================================================================
+# 1. CONFIGURACIÓN Y CONSTANTES
+# ============================================================================
+
+class EstadoNodo(Enum):
+    INICIANDO = "iniciando"
+    ACTIVO = "activo"
+    SINCRONIZANDO = "sincronizando"
+    AUDITANDO = "auditando"
+    MUTANDO = "mutando"
+
+class TipoModulo(Enum):
+    VISION = "vision"
+    LENGUAJE = "lenguaje"
+    AUDITORIA_JUDICIAL = "auditoria_judicial"
+    AUDITORIA_MEDIOS = "auditoria_medios"
+    ANALISIS_SESGOS = "analisis_sesgos"
+    RAZONAMIENTO_ETICO = "razonamiento_etico"
+    COMPUTACION_NUMERICA = "computacion_numerica"
+
+class TipoEvento(Enum):
+    CREACION_NODO = "creacion_nodo"
+    CONEXION_P2P = "conexion_p2p"
+    PROCESAMIENTO = "procesamiento"
+    RESULTADO = "resultado"
+    AUDITORIA = "auditoria"
+    MUTACION = "mutacion"
+    FUSION = "fusion"
+    DIVISION = "division"
+    SINCRONIZACION = "sincronizacion"
+    ERROR = "error"
+
+# ============================================================================
+# 2. SISTEMA DE AUDITORÍA INMUTABLE (LEDGER DISTRIBUIDO)
+# ============================================================================
+
+@dataclass
+class EventoAuditable:
+    """Evento con trazabilidad criptográfica completa"""
+    id: str
+    tipo: TipoEvento
+    nodo_origen: str
+    timestamp: datetime
+    datos: Dict[str, Any]
+    hash_anterior: str
+    hash_actual: str = None
+    firma_digital: str = None
+    
+    def __post_init__(self):
+        if self.hash_actual is None:
+            self.hash_actual = self.calcular_hash()
+    
+    def calcular_hash(self) -> str:
+        """Calcula hash SHA-256 del evento"""
+        contenido = f"{self.id}{self.tipo.value}{self.nodo_origen}{self.timestamp.isoformat()}{json.dumps(self.datos, sort_keys=True)}{self.hash_anterior}"
+        return hashlib.sha256(contenido.encode()).hexdigest()
+    
+    def verificar_integridad(self) -> bool:
+        """Verifica que el hash sea correcto"""
+        return self.hash_actual == self.calcular_hash()
+    
+    def serializar(self) -> str:
+        """Serializa a JSON para transmisión"""
+        return json.dumps(asdict(self), default=str, ensure_ascii=False)
+    
+    @classmethod
+    def deserializar(cls, data: str) -> 'EventoAuditable':
+        """Crea desde JSON"""
+        dict_data = json.loads(data)
+        dict_data['tipo'] = TipoEvento(dict_data['tipo'])
+        dict_data['timestamp'] = datetime.fromisoformat(dict_data['timestamp'])
+        return cls(**dict_data)
+
+class LedgerDistribuido:
+    """Ledger distribuido tipo blockchain para auditoría completa"""
+    
+    def __init__(self, nodo_id: str):
+        self.nodo_id = nodo_id
+        self.cadena: List[EventoAuditable] = []
+        self.eventos_pendientes: queue.Queue = queue.Queue()
+        self.ledgers_conocidos: Dict[str, List[str]] = {}  # {nodo_id: [hashes]}
+        
+        # Crear bloque génesis
+        self._crear_bloque_genesis()
+    
+    def _crear_bloque_genesis(self):
+        """Crea el bloque inicial del ledger"""
+        evento_genesis = EventoAuditable(
+            id=str(uuid.uuid4()),
+            tipo=TipoEvento.CREACION_NODO,
+            nodo_origen=self.nodo_id,
+            timestamp=datetime.utcnow(),
+            datos={
+                "tipo": "bloque_genesis",
+                "version_sistema": "1.0.0",
+                "algoritmo_hash": "SHA-256",
+                "mensaje": "Iniciando sistema P2P auditale"
+            },
+            hash_anterior="0" * 64
+        )
+        self.cadena.append(evento_genesis)
+    
+    def registrar_evento(self, tipo: TipoEvento, datos: Dict) -> EventoAuditable:
+        """Registra nuevo evento en el ledger"""
+        hash_anterior = self.cadena[-1].hash_actual if self.cadena else "0" * 64
+        
+        evento = EventoAuditable(
+            id=str(uuid.uuid4()),
+            tipo=tipo,
+            nodo_origen=self.nodo_id,
+            timestamp=datetime.utcnow(),
+            datos=datos,
+            hash_anterior=hash_anterior
+        )
+        
+        self.cadena.append(evento)
+        
+        # Notificar a otros nodos (simulado)
+        self.eventos_pendientes.put(evento)
+        
+        return evento
+    
+    def verificar_integridad(self) -> Dict[str, Any]:
+        """Verifica integridad completa del ledger"""
+        errores = []
+        hash_anterior = None
+        
+        for i, evento in enumerate(self.cadena):
+            # Verificar hash interno
+            if not evento.verificar_integridad():
+                errores.append(f"Evento {i}: hash incorrecto")
+            
+            # Verificar cadena de hashes
+            if i == 0:
+                if evento.hash_anterior != "0" * 64:
+                    errores.append(f"Evento {i}: hash_anterior no es génesis")
+            else:
+                if evento.hash_anterior != self.cadena[i-1].hash_actual:
+                    errores.append(f"Evento {i}: cadena de hashes rota")
+            
+            hash_anterior = evento.hash_actual
+        
+        return {
+            "nodo": self.nodo_id,
+            "total_eventos": len(self.cadena),
+            "integro": len(errores) == 0,
+            "errores": errores,
+            "ultimo_hash": hash_anterior,
+            "primer_evento": self.cadena[0].timestamp if self.cadena else None,
+            "ultimo_evento": self.cadena[-1].timestamp if self.cadena else None
+        }
+    
+    def exportar_para_auditoria(self, limite: int = 1000) -> List[Dict]:
+        """Exporta eventos para auditoría externa"""
+        return [asdict(e) for e in self.cadena[-limite:]]
+    
+    def sincronizar_con_nodo(self, eventos_remotos: List[EventoAuditable]) -> bool:
+        """Sincroniza ledger con eventos de otro nodo"""
+        # Implementación simplificada de consenso
+        if not eventos_remotos:
+            return False
+        
+        # Verificar cada evento
+        for evento in eventos_remotos:
+            if evento.verificar_integridad():
+                # Solo añadir si no existe
+                if not any(e.id == evento.id for e in self.cadena):
+                    self.cadena.append(evento)
+        
+        # Ordenar por timestamp
+        self.cadena.sort(key=lambda x: x.timestamp)
+        
+        return True
+
+# ============================================================================
+# 3. MÓDULOS ESPECIALIZADOS
+# ============================================================================
+
+class ModuloBase:
+    """Clase base para todos los módulos especializados"""
+    
+    def __init__(self, tipo: TipoModulo, version: str = "1.0.0"):
+        self.tipo = tipo
+        self.version = version
+        self.estadisticas = {
+            "procesamientos": 0,
+            "exitos": 0,
+            "errores": 0,
+            "tiempo_total": 0.0,
+            "ultimo_procesamiento": None
+        }
+        self.metricas_especificas = {}
+    
+    def procesar(self, entrada: Any, contexto: Dict) -> Dict[str, Any]:
+        """Procesa entrada y retorna resultado con metadatos"""
+        inicio = time.time()
+        
+        try:
+            resultado = self._procesar_interno(entrada, contexto)
+            self.estadisticas["exitos"] += 1
+            
+            # Añadir metadatos de auditoría
+            resultado["metadatos_auditoria"] = {
+                "modulo": self.tipo.value,
+                "version": self.version,
+                "tiempo_procesamiento": time.time() - inicio,
+                "estadisticas_modulo": self.estadisticas.copy()
+            }
+            
+            return resultado
+            
+        except Exception as e:
+            self.estadisticas["errores"] += 1
+            raise
+    
+    def _procesar_interno(self, entrada: Any, contexto: Dict) -> Dict[str, Any]:
+        """Método interno a implementar por cada módulo"""
+        raise NotImplementedError
+    
+    def obtener_estadisticas(self) -> Dict:
+        """Retorna estadísticas del módulo"""
+        return self.estadisticas.copy()
+    
+    def reiniciar_estadisticas(self):
+        """Reinicia contadores"""
+        self.estadisticas = {
+            "procesamientos": 0,
+            "exitos": 0,
+            "errores": 0,
+            "tiempo_total": 0.0,
+            "ultimo_procesamiento": None
+        }
+
+class ModuloVision(ModuloBase):
+    """Módulo de procesamiento de visión"""
+    
+    def __init__(self):
+        super().__init__(TipoModulo.VISION, "2.1.0")
+        self.detecciones_recientes = deque(maxlen=1000)
+    
+    def _procesar_interno(self, imagen_data: Any, contexto: Dict) -> Dict[str, Any]:
+        # Simulación - en realidad usaría OpenCV, YOLO, etc.
+        self.estadisticas["procesamientos"] += 1
+        
+        # Análisis simulado
+        objetos_detectados = [
+            {"objeto": "persona", "confianza": 0.95, "bbox": [10, 20, 100, 200]},
+            {"objeto": "coche", "confianza": 0.87, "bbox": [150, 30, 300, 180]}
+        ]
+        
+        # Análisis ético de la imagen
+        analisis_etico = self._analizar_aspectos_eticos(imagen_data, contexto)
+        
+        return {
+            "objetos_detectados": objetos_detectados,
+            "metadata_imagen": {
+                "tamano_estimado": "800x600",
+                "colores_dominantes": ["#FF0000", "#00FF00"],
+                "brillo_promedio": 0.7
+            },
+            "analisis_etico": analisis_etico,
+            "embedding": np.random.randn(512).tolist()  # Simulación
+        }
+    
+    def _analizar_aspectos_eticos(self, imagen_data: Any, contexto: Dict) -> Dict:
+        """Analiza aspectos éticos de la imagen"""
+        return {
+            "riesgo_privacidad": 0.3,
+            "contenido_sensible": False,
+            "sesgos_detectados": [],
+            "recomendaciones": ["Ninguna"]
+        }
+
+class ModuloLenguaje(ModuloBase):
+    """Módulo de procesamiento de lenguaje natural"""
+    
+    def __init__(self):
+        super().__init__(TipoModulo.LENGUAJE, "3.0.0")
+        self.diccionario_sesgos = {
+            "genero": ["él", "ella", "hombre", "mujer", "masculino", "femenino"],
+            "clase": ["rico", "pobre", "élite", "pueblo"],
+            "edad": ["joven", "viejo", "anciano", "chaval"]
+        }
+    
+    def _procesar_interno(self, texto: str, contexto: Dict) -> Dict[str, Any]:
+        self.estadisticas["procesamientos"] += 1
+        
+        # Análisis de texto completo
+        analisis = {
+            "longitud_caracteres": len(texto),
+            "longitud_palabras": len(texto.split()),
+            "idioma_detectado": "es",
+            "tono_emocional": self._analizar_tono(texto),
+            "intencion_detectada": self._detectar_intencion(texto)
+        }
+        
+        # Detección de sesgos
+        analisis["sesgos_detectados"] = self._detectar_sesgos(texto)
+        
+        # Análisis de framing
+        analisis["framing"] = self._analizar_framing(texto)
+        
+        # Generar embedding
+        analisis["embedding"] = self._generar_embedding(texto)
+        
+        return analisis
+    
+    def _analizar_tono(self, texto: str) -> Dict:
+        """Analiza tono emocional del texto"""
+        palabras_positivas = ["bueno", "excelente", "maravilloso", "genial"]
+        palabras_negativas = ["malo", "terrible", "horrible", "pésimo"]
+        
+        texto_lower = texto.lower()
+        pos = sum(1 for p in palabras_positivas if p in texto_lower)
+        neg = sum(1 for p in palabras_negativas if p in texto_lower)
+        
+        total = pos + neg
+        if total > 0:
+            ratio_pos = pos / total
+        else:
+            ratio_pos = 0.5
+        
+        return {
+            "positividad": ratio_pos,
+            "negatividad": 1 - ratio_pos,
+            "neutralidad": 0.3 if total == 0 else 0.1
+        }
+    
+    def _detectar_sesgos(self, texto: str) -> List[Dict]:
+        """Detecta sesgos en el texto"""
+        sesgos = []
+        texto_lower = texto.lower()
+        
+        for tipo, palabras in self.diccionario_sesgos.items():
+            apariciones = sum(1 for p in palabras if p in texto_lower)
+            if apariciones > 0:
+                sesgos.append({
+                    "tipo": tipo,
+                    "apariciones": apariciones,
+                    "palabras_clave": [p for p in palabras if p in texto_lower]
+                })
+        
+        return sesgos
+    
+    def _analizar_framing(self, texto: str) -> Dict:
+        """Analiza el framing (encuadre) del texto"""
+        marcos = {
+            "conflicto": ["lucha", "guerra", "batalla", "enfrentamiento"],
+            "economia": ["dinero", "coste", "precio", "economía"],
+            "moral": ["deber", "ético", "correcto", "incorrecto"],
+            "progreso": ["avance", "mejora", "futuro", "innovación"]
+        }
+        
+        resultado = {}
+        texto_lower = texto.lower()
+        
+        for marco, palabras in marcos.items():
+            count = sum(1 for p in palabras if p in texto_lower)
+            resultado[marco] = count / len(palabras) if palabras else 0
+        
+        return resultado
+    
+    def _detectar_intencion(self, texto: str) -> str:
+        """Detecta intención principal del texto"""
+        if any(p in texto.lower() for p in ["?", "por qué", "cómo", "cuándo"]):
+            return "consulta"
+        elif any(p in texto.lower() for p in ["!", "increíble", "escándalo"]):
+            return "expresion_emocional"
+        elif any(p in texto.lower() for p in ["debería", "recomiendo", "sugiero"]):
+            return "recomendacion"
+        else:
+            return "informacion"
+    
+    def _generar_embedding(self, texto: str) -> List[float]:
+        """Genera embedding del texto (simulación)"""
+        # En realidad usaría BERT, GPT, etc.
+        np.random.seed(hash(texto) % 2**32)
+        return np.random.randn(768).tolist()
+
+class ModuloAuditoriaJudicial(ModuloBase):
+    """Módulo especializado en auditoría de textos judiciales"""
+    
+    def __init__(self):
+        super().__init__(TipoModulo.AUDITORIA_JUDICIAL, "1.5.0")
+        self.patrones_sesgo = {
+            "genero": {
+                "masculino": ["él", "hombre", "varón", "masculino"],
+                "femenino": ["ella", "mujer", "femenino"]
+            },
+            "severidad": {
+                "duro": ["reincidente", "peligroso", "grave", "delito"],
+                "suave": ["atenuante", "circunstancia", "favorable", "arrepentimiento"]
+            }
+        }
+    
+    def _procesar_interno(self, texto_sentencia: str, contexto: Dict) -> Dict[str, Any]:
+        self.estadisticas["procesamientos"] += 1
+        
+        # Análisis completo de sentencia
+        analisis = {
+            "metadata_documento": self._extraer_metadata(texto_sentencia),
+            "sesgos_detectados": self._analizar_sesgos(texto_sentencia),
+            "patrones_linguisticos": self._detectar_patrones(texto_sentencia),
+            "comparativa_jurisprudencial": self._comparar_con_patrones(texto_sentencia),
+            "recomendaciones_auditoria": []
+        }
+        
+        # Generar puntuación de riesgo
+        analisis["puntuacion_riesgo_sesgo"] = self._calcular_puntuacion_riesgo(analisis)
+        
+        # Generar resumen ejecutivo
+        analisis["resumen_auditoria"] = self._generar_resumen(analisis)
+        
+        return analisis
+    
+    def _extraer_metadata(self, texto: str) -> Dict:
+        """Extrae metadatos de la sentencia"""
+        lineas = texto.split('\n')
+        return {
+            "numero_lineas": len(lineas),
+            "numero_palabras": len(texto.split()),
+            "posible_juzgado": self._extraer_juzgado(texto),
+            "posible_fecha": self._extraer_fecha(texto),
+            "estructura_detectada": self._detectar_estructura(texto)
+        }
+    
+    def _analizar_sesgos(self, texto: str) -> Dict:
+        """Analiza sesgos en la sentencia"""
+        resultados = {}
+        texto_lower = texto.lower()
+        
+        for tipo_sesgo, categorias in self.patrones_sesgo.items():
+            resultados[tipo_sesgo] = {}
+            for categoria, palabras in categorias.items():
+                count = sum(1 for p in palabras if p in texto_lower)
+                resultados[tipo_sesgo][categoria] = {
+                    "apariciones": count,
+                    "ratio": count / len(palabras) if palabras else 0
+                }
+        
+        # Calcular desbalance de género
+        if "genero" in resultados:
+            masc = resultados["genero"]["masculino"]["apariciones"]
+            fem = resultados["genero"]["femenino"]["apariciones"]
+            total = masc + fem
+            resultados["genero"]["desbalance"] = abs(masc - fem) / total if total > 0 else 0
+        
+        return resultados
+    
+    def _detectar_patrones(self, texto: str) -> List[str]:
+        """Detecta patrones lingüísticos característicos"""
+        patrones = []
+        texto_lower = texto.lower()
+        
+        if "visto para" in texto_lower and "fallo" in texto_lower:
+            patrones.append("ESTRUCTURA_JUDICIAL_CLASICA")
+        
+        if "considerando" in texto_lower and "resultando" in texto_lower:
+            patrones.append("ESTILO_JURIDICO_FORMAL")
+        
+        if len(texto.split()) < 500:
+            patrones.append("SENTENCIA_BREVE")
+        elif len(texto.split()) > 5000:
+            patrones.append("SENTENCIA_EXTENSA")
+        
+        if "reincidente" in texto_lower:
+            patrones.append("MENCIÓN_REINCIDENCIA")
+        
+        if "atenuante" in texto_lower and "agravante" not in texto_lower:
+            patrones.append("SOLO_ATENUANTES")
+        elif "agravante" in texto_lower and "atenuante" not in texto_lower:
+            patrones.append("SOLO_AGRAVANTES")
+        
+        return patrones
+    
+    def _comparar_con_patrones(self, texto: str) -> Dict:
+        """Compara con patrones de otras sentencias"""
+        # Simulación - en realidad usaría base de datos
+        return {
+            "similitud_promedio": random.uniform(0.3, 0.9),
+            "sentencias_similares": random.randint(5, 50),
+            "desviacion_estandar": random.uniform(0.1, 0.3)
+        }
+    
+    def _calcular_puntuacion_riesgo(self, analisis: Dict) -> float:
+        """Calcula puntuación de riesgo de sesgo"""
+        puntuacion = 0.0
+        
+        # Peso por sesgo de género
+        if "genero" in analisis["sesgos_detectados"]:
+            desbalance = analisis["sesgos_detectados"]["genero"].get("desbalance", 0)
+            puntuacion += desbalance * 0.4
+        
+        # Peso por patrones
+        patrones = analisis["patrones_linguisticos"]
+        if "SOLO_ATENUANTES" in patrones or "SOLO_AGRAVANTES" in patrones:
+            puntuacion += 0.2
+        
+        if "SENTENCIA_BREVE" in patrones:
+            puntuacion += 0.1
+        
+        return min(1.0, puntuacion)
+    
+    def _generar_resumen(self, analisis: Dict) -> Dict:
+        """Genera resumen ejecutivo de la auditoría"""
+        riesgo = analisis["puntuacion_riesgo_sesgo"]
+        
+        if riesgo > 0.7:
+            nivel = "ALTO_RIESGO_SESGO"
+            recomendacion = "Revisión exhaustiva recomendada"
+        elif riesgo > 0.4:
+            nivel = "RIESGO_MODERADO"
+            recomendacion = "Revisión recomendada"
+        else:
+            nivel = "BAJO_RIESGO"
+            recomendacion = "Sin observaciones críticas"
+        
+        return {
+            "nivel_riesgo": nivel,
+            "puntuacion": riesgo,
+            "recomendacion": recomendacion,
+            "sesgos_principales": list(analisis["sesgos_detectados"].keys()),
+            "patrones_relevantes": analisis["patrones_linguisticos"][:3] if analisis["patrones_linguisticos"] else []
+        }
+    
+    def _extraer_juzgado(self, texto: str) -> str:
+        """Intenta extraer el juzgado del texto"""
+        # Simulación
+        posibles = ["Juzgado de lo Penal", "Juzgado de Primera Instancia", "Audiencia Provincial"]
+        for p in posibles:
+            if p.lower() in texto.lower():
+                return p
+        return "NO_DETECTADO"
+    
+    def _extraer_fecha(self, texto: str) -> str:
+        """Intenta extraer fecha del texto"""
+        # Simulación
+        import re
+        fechas = re.findall(r'\d{1,2}/\d{1,2}/\d{4}', texto)
+        return fechas[0] if fechas else "NO_DETECTADA"
+    
+    def _detectar_estructura(self, texto: str) -> List[str]:
+        """Detecta estructura del documento"""
+        estructura = []
+        if "ANTECEDENTES" in texto:
+            estructura.append("ANTECEDENTES")
+        if "FUNDAMENTOS" in texto:
+            estructura.append("FUNDAMENTOS")
+        if "FALLO" in texto:
+            estructura.append("FALLO")
+        return estructura if estructura else ["ESTRUCTURA_NO_ESTANDAR"]
+
+class ModuloAnalisisMedios(ModuloBase):
+    """Módulo para análisis de discursos mediáticos"""
+    
+    def __init__(self):
+        super().__init__(TipoModulo.AUDITORIA_MEDIOS, "2.0.0")
+        
+        # Diccionarios para análisis de framing
+        self.marcos = {
+            "conflicto": ["batalla", "lucha", "guerra", "enfrentamiento", "combate"],
+            "economia": ["dinero", "coste", "precio", "económico", "financiero"],
+            "moral": ["ético", "moral", "deber", "correcto", "incorrecto"],
+            "progreso": ["avance", "progreso", "futuro", "innovación", "mejora"],
+            "riesgo": ["peligro", "amenaza", "riesgo", "alerta", "advertencia"]
+        }
+        
+        # Falacias lógicas comunes
+        self.falacias = {
+            "ad_hominem": ["traidor", "enemigo", "corrupto", "incompetente"],
+            "falsa_dicotomia": ["o estás con nosotros o contra nosotros", "blanco o negro"],
+            "apelacion_emocion": ["escándalo", "increíble", "impactante", "aterrador"],
+            "generalizacion": ["todos saben", "nadie cree", "siempre", "nunca"]
+        }
+    
+    def _procesar_interno(self, texto: str, contexto: Dict) -> Dict[str, Any]:
+        self.estadisticas["procesamientos"] += 1
+        
+        # Análisis multidimensional
+        analisis = {
+            "caracteristicas_texto": self._analizar_caracteristicas(texto),
+            "framing": self._analizar_framing_completo(texto),
+            "falacias_detectadas": self._detectar_falacias(texto),
+            "transparencia": self._evaluar_transparencia(texto),
+            "polarizacion": self._calcular_polarizacion(texto),
+            "emocionalidad": self._analizar_emocionalidad(texto)
+        }
+        
+        # Puntuación consolidada
+        analisis["puntuacion_calidad"] = self._calcular_puntuacion_calidad(analisis)
+        
+        # Generar etiquetas
+        analisis["etiquetas"] = self._generar_etiquetas(analisis)
+        
+        return analisis
+    
+    def _analizar_caracteristicas(self, texto: str) -> Dict:
+        """Analiza características básicas del texto"""
+        palabras = texto.split()
+        oraciones = texto.split('.')
+        
+        return {
+            "longitud_palabras": len(palabras),
+            "longitud_oraciones": len(oraciones),
+            "palabras_por_oracion": len(palabras) / len(oraciones) if oraciones else 0,
+            "vocabulario_unico": len(set(p.lower() for p in palabras)) / len(palabras) if palabras else 0,
+            "densidad_informacion": self._calcular_densidad_informacion(texto)
+        }
+    
+    def _analizar_framing_completo(self, texto: str) -> Dict:
+        """Analiza todos los marcos (framing) presentes"""
+        texto_lower = texto.lower()
+        resultados = {}
+        
+        for marco, palabras in self.marcos.items():
+            count = sum(1 for p in palabras if p in texto_lower)
+            resultados[marco] = {
+                "intensidad": count / len(palabras) if palabras else 0,
+                "palabras_encontradas": [p for p in palabras if p in texto_lower],
+                "frecuencia": count
+            }
+        
+        # Identificar marco dominante
+        if resultados:
+            marco_dominante = max(resultados.items(), key=lambda x: x[1]["intensidad"])
+            resultados["marco_dominante"] = {
+                "nombre": marco_dominante[0],
+                "intensidad": marco_dominante[1]["intensidad"]
+            }
+        
+        return resultados
+    
+    def _detectar_falacias(self, texto: str) -> List[Dict]:
+        """Detecta falacias lógicas en el texto"""
+        falacias_detectadas = []
+        texto_lower = texto.lower()
+        
+        for tipo, patrones in self.falacias.items():
+            for patron in patrones:
+                if patron in texto_lower:
+                    falacias_detectadas.append({
+                        "tipo": tipo,
+                        "patron": patron,
+                        "contexto": self._extraer_contexto(texto, patron, 50)
+                    })
+                    break  # Solo primera aparición por tipo
+        
+        return falacias_detectadas
+    
+    def _evaluar_transparencia(self, texto: str) -> Dict:
+        """Evalúa transparencia y rigurosidad del texto"""
+        indicadores = {
+            "citas": len([w for w in text.split() if '“' in w or '"' in w]),
+            "datos_numericos": len([c for c in text if c.isdigit()]),
+            "referencias": text.count("según") + text.count("fuente") + text.count("estudio"),
+            "cautela_linguistica": text.count("podría") + text.count("posiblemente") + text.count("según algunos")
+        }
+        
+        # Puntuar cada indicador
+        puntuacion = 0.0
+        if indicadores["citas"] > 0:
+            puntuacion += 0.2
+        if indicadores["datos_numericos"] > 2:
+            puntuacion += 0.2
+        if indicadores["referencias"] > 0:
+            puntuacion += 0.3
+        if indicadores["cautela_linguistica"] > 0:
+            puntuacion += 0.1
+        
+        # Penalizar afirmaciones absolutas sin respaldo
+        absolutos = ["siempre", "nunca", "todos", "nadie"]
+        if any(a in texto.lower() for a in absolutos) and indicadores["referencias"] == 0:
+            puntuacion -= 0.2
+        
+        return {
+            "puntuacion": max(0.0, min(1.0, puntuacion)),
+            "indicadores": indicadores,
+            "nivel": "ALTA" if puntuacion > 0.6 else "MEDIA" if puntuacion > 0.3 else "BAJA"
+        }
+    
+    def _calcular_polarizacion(self, texto: str) -> float:
+        """Calcula nivel de polarización del texto"""
+        palabras_polarizantes = ["nosotros", "ellos", "bueno", "malo", "correcto", "incorrecto"]
+        texto_lower = texto.lower()
+        
+        count = sum(1 for p in palabras_polarizantes if p in texto_lower)
+        total_palabras = len(texto_lower.split())
+        
+        if total_palabras == 0:
+            return 0.0
+        
+        ratio = count / total_palabras
+        return min(1.0, ratio * 10)  # Escalar
+    
+    def _analizar_emocionalidad(self, texto: str) -> Dict:
+        """Analiza carga emocional del texto"""
+        emociones = {
+            "miedo": ["peligro", "miedo", "terror", "amenaza", "riesgo"],
+            "ira": ["ira", "enfado", "rabia", "indignación", "furia"],
+            "alegria": ["alegría", "feliz", "contento", "gozo", "dicha"],
+            "tristeza": ["triste", "dolor", "pena", "lamento", "depresión"]
+        }
+        
+        texto_lower = texto.lower()
+        resultados = {}
+        
+        for emocion, palabras in emociones.items():
+            count = sum(1 for p in palabras if p in texto_lower)
+            resultados[emocion] = count / len(palabras) if palabras else 0
+        
+        # Emoción dominante
+        if resultados:
+            emocion_dominante = max(resultados.items(), key=lambda x: x[1])
+            resultados["dominante"] = {
+                "emocion": emocion_dominante[0],
+                "intensidad": emocion_dominante[1]
+            }
+        
+        return resultados
+    
+    def _calcular_densidad_informacion(self, texto: str) -> float:
+        """Calcula densidad informativa (palabras únicas / total)"""
+        palabras = texto.lower().split()
+        if not palabras:
+            return 0.0
+        
+        unicas = set(palabras)
+        return len(unicas) / len(palabras)
+    
+    def _calcular_puntuacion_calidad(self, analisis: Dict) -> float:
+        """Calcula puntuación consolidada de calidad"""
+        componentes = {
+            "transparencia": analisis["transparencia"]["puntuacion"] * 0.4,
+            "falacias": max(0.0, 1.0 - (len(analisis["falacias_detectadas"]) * 0.1)) * 0.3,
+            "polarizacion": max(0.0, 1.0 - analisis["polarizacion"]) * 0.2,
+            "estructura": min(1.0, analisis["caracteristicas_texto"]["vocabulario_unico"] * 2) * 0.1
+        }
+        
+        return sum(componentes.values())
+    
+    def _generar_etiquetas(self, analisis: Dict) -> List[str]:
+        """Genera etiquetas descriptivas del análisis"""
+        etiquetas = []
+        
+        # Etiquetas de calidad
+        calidad = analisis["puntuacion_calidad"]
+        if calidad > 0.7:
+            etiquetas.append("ALTA_CALIDAD")
+        elif calidad > 0.4:
+            etiquetas.append("CALIDAD_MEDIA")
+        else:
+            etiquetas.append("BAJA_CALIDAD")
+        
+        # Etiquetas de framing
+        framing = analisis["framing"]
+        if "marco_dominante" in framing:
+            etiquetas.append(f"MARCO_{framing['marco_dominante']['nombre'].upper()}")
+        
+        # Etiquetas de emocionalidad
+        emociones = analisis["emocionalidad"]
+        if "dominante" in emociones and emociones["dominante"]["intensidad"] > 0.3:
+            etiquetas.append(f"EMOCION_{emociones['dominante']['emocion'].upper()}")
+        
+        # Etiquetas de transparencia
+        trans = analisis["transparencia"]["nivel"]
+        etiquetas.append(f"TRANSPARENCIA_{trans}")
+        
+        # Etiquetas de falacias
+        if analisis["falacias_detectadas"]:
+            etiquetas.append("CONTIENE_FALACIAS")
+        
+        return etiquetas
+    
+    def _extraer_contexto(self, texto: str, patron: str, caracteres: int = 50) -> str:
+        """Extrae contexto alrededor de un patrón"""
+        idx = texto.lower().find(patron)
+        if idx == -1:
+            return ""
+        
+        inicio = max(0, idx - caracteres)
+        fin = min(len(texto), idx + len(patron) + caracteres)
+        
+        contexto = texto[inicio:fin]
+        if inicio > 0:
+            contexto = "..." + contexto
+        if fin < len(texto):
+            contexto = contexto + "..."
+        
+        return contexto
+
+# ============================================================================
+# 4. NODO P2P COMPLETO
+# ============================================================================
+
+class NodoP2P:
+    """Nodo completo del sistema P2P de IA auditale"""
+    
+    def __init__(self, nombre: str, puerto: int = 0):
+        self.nombre = nombre
+        self.id = f"{nombre}_{hashlib.sha256(nombre.encode()).hexdigest()[:8]}"
+        self.puerto = puerto
+        self.estado = EstadoNodo.INICIANDO
+        
+        # Ledger de auditoría
+        self.ledger = LedgerDistribuido(self.id)
+        
+        # Módulos disponibles
+        self.modulos: Dict[TipoModulo, ModuloBase] = {}
+        self._inicializar_modulos()
+        
+        # Conexiones P2P
+        self.conexiones: Dict[str, Any] = {}  # {nodo_id: socket/info}
+        self.nodos_conocidos: set = set()
+        
+        # Estado interno
+        self.reputacion = 1.0
+        self.estadisticas = {
+            "consultas_procesadas": 0,
+            "consultas_recibidas": 0,
+            "bytes_transmitidos": 0,
+            "errores": 0,
+            "tiempo_activo": 0.0
+        }
+        
+        # Cache de resultados
+        self.cache_resultados: Dict[str, Dict] = {}
+        
+        # Valores éticos del nodo
+        self.valores_eticos = {
+            "transparencia": random.uniform(0.7, 1.0),
+            "imparcialidad": random.uniform(0.6, 1.0),
+            "rigor": random.uniform(0.5, 0.9),
+            "cooperacion": random.uniform(0.8, 1.0)
+        }
+        
+        # Thread para networking
+        self.hilo_red = None
+        self.ejecutando = False
+        
+        # Registrar creación
+        self.ledger.registrar_evento(
+            TipoEvento.CREACION_NODO,
+            {
+                "nombre": nombre,
+                "id": self.id,
+                "puerto": puerto,
+                "modulos": [m.value for m in self.modulos.keys()],
+                "valores_eticos": self.valores_eticos
+            }
+        )
+        
+        print(f"✅ Nodo {self.nombre} ({self.id}) inicializado")
+    
+    def _inicializar_modulos(self):
+        """Inicializa módulos del nodo"""
+        # Todos los nodos tienen lenguaje y visión básicos
+        self.modulos[TipoModulo.LENGUAJE] = ModuloLenguaje()
+        self.modulos[TipoModulo.VISION] = ModuloVision()
+        
+        # Algunos nodos especializados
+        especializaciones = [
+            (TipoModulo.AUDITORIA_JUDICIAL, ModuloAuditoriaJudicial),
+            (TipoModulo.AUDITORIA_MEDIOS, ModuloAnalisisMedios),
+            (TipoModulo.ANALISIS_SESGOS, ModuloLenguaje),  # Placeholder
+            (TipoModulo.RAZONAMIENTO_ETICO, ModuloLenguaje),  # Placeholder
+            (TipoModulo.COMPUTACION_NUMERICA, ModuloBase)  # Placeholder
+        ]
+        
+        # Aleatorizar especializaciones (simulación de diversidad)
+        for tipo, clase in especializaciones:
+            if random.random() < 0.3:  # 30% de probabilidad por módulo
+                self.modulos[tipo] = clase() if clase != ModuloBase else ModuloBase(tipo)
+    
+    def procesar_consulta(self, consulta: Dict, contexto: Optional[Dict] = None) -> Dict:
+        """Procesa una consulta usando los módulos disponibles"""
+        inicio = time.time()
+        self.estadisticas["consultas_recibidas"] += 1
+        
+        # Registrar inicio de procesamiento
+        evento_inicio = self.ledger.registrar_evento(
+            TipoEvento.PROCESAMIENTO,
+            {
+                "consulta_id": consulta.get("id", str(uuid.uuid4())),
+                "tipo_consulta": consulta.get("tipo", "desconocido"),
+                "contexto": contexto or {},
+                "timestamp_inicio": datetime.utcnow().isoformat()
+            }
+        )
+        
+        try:
+            # Determinar módulos necesarios
+            modulos_necesarios = self._determinar_modulos_necesarios(consulta)
+            modulos_disponibles = [m for t, m in self.modulos.items() if t in modulos_necesarios]
+            
+            if not modulos_disponibles:
+                raise ValueError(f"No hay módulos para procesar: {consulta.get('tipo')}")
+            
+            # Procesar con cada módulo disponible
+            resultados = {}
+            for modulo in modulos_disponibles:
+                try:
+                    resultado = modulo.procesar(
+                        consulta.get("datos"),
+                        contexto or {}
+                    )
+                    resultados[modulo.tipo.value] = resultado
+                except Exception as e:
+                    resultados[modulo.tipo.value] = {
+                        "error": str(e),
+                        "exito": False
+                    }
+            
+            # Combinar resultados
+            resultado_final = self._combinar_resultados(resultados, consulta, contexto)
+            
+            # Añadir metadatos de auditoría
+            resultado_final["auditoria"] = {
+                "nodo_procesador": self.id,
+                "consulta_id": consulta.get("id", "desconocido"),
+                "evento_inicio_id": evento_inicio.id,
+                "tiempo_procesamiento": time.time() - inicio,
+                "modulos_usados": list(resultados.keys()),
+                "hash_resultado": hashlib.sha256(
+                    json.dumps(resultado_final, sort_keys=True).encode()
+                ).hexdigest()[:16]
+            }
+            
+            # Registrar resultado
+            self.ledger.registrar_evento(
+                TipoEvento.RESULTADO,
+                {
+                    "consulta_id": consulta.get("id", "desconocido"),
+                    "exito": True,
+                    "modulos_usados": list(resultados.keys()),
+                    "tiempo_procesamiento": time.time() - inicio,
+                    "hash_resultado": resultado_final["auditoria"]["hash_resultado"],
+                    "evento_inicio_id": evento_inicio.id
+                }
+            )
+            
+            # Actualizar estadísticas
+            self.estadisticas["consultas_procesadas"] += 1
+            
+            # Cachear resultado (simplificado)
+            cache_key = f"{consulta.get('tipo')}_{hashlib.sha256(json.dumps(consulta).encode()).hexdigest()[:16]}"
+            self.cache_resultados[cache_key] = {
+                "resultado": resultado_final,
+                "timestamp": datetime.utcnow(),
+                "uso": 0
+            }
+            
+            return resultado_final
+            
+        except Exception as e:
+            # Registrar error
+            self.ledger.registrar_evento(
+                TipoEvento.ERROR,
+                {
+                    "consulta_id": consulta.get("id", "desconocido"),
+                    "error": str(e),
+                    "stack_trace": "No disponible en producción",
+                    "evento_inicio_id": evento_inicio.id
+                }
+            )
+            
+            self.estadisticas["errores"] += 1
+            raise
+    
+    def _determinar_modulos_necesarios(self, consulta: Dict) -> List[TipoModulo]:
+        """Determina qué módulos se necesitan para la consulta"""
+        tipo = consulta.get("tipo", "").lower()
+        
+        mapeo = {
+            "vision": [TipoModulo.VISION],
+            "texto": [TipoModulo.LENGUAJE],
+            "auditoria_judicial": [TipoModulo.AUDITORIA_JUDICIAL, TipoModulo.LENGUAJE],
+            "auditoria_medios": [TipoModulo.AUDITORIA_MEDIOS, TipoModulo.LENGUAJE],
+            "analisis_sesgos": [TipoModulo.ANALISIS_SESGOS, TipoModulo.LENGUAJE],
+            "razonamiento_etico": [TipoModulo.RAZONAMIENTO_ETICO, TipoModulo.LENGUAJE]
+        }
+        
+        return mapeo.get(tipo, [TipoModulo.LENGUAJE])
+    
+    def _combinar_resultados(self, resultados: Dict, consulta: Dict, contexto: Dict) -> Dict:
+        """Combina resultados de múltiples módulos"""
+        resultado_combinado = {
+            "consulta": consulta.get("tipo", "desconocido"),
+            "timestamp": datetime.utcnow().isoformat(),
+            "nodo": self.id,
+            "resultados_individuales": resultados,
+            "resumen": {}
+        }
+        
+        # Generar resumen consolidado
+        for modulo, resultado in resultados.items():
+            if "resumen" in resultado:
+                resultado_combinado["resumen"][modulo] = resultado["resumen"]
+            elif "analisis" in resultado:
+                resultado_combinado["resumen"][modulo] = resultado["analisis"]
+        
+        # Calcular confianza global
+        confianzas = []
+        for modulo, resultado in resultados.items():
+            if "metadatos_auditoria" in resultado:
+                confianza = resultado["metadatos_auditoria"].get("tiempo_procesamiento", 0)
+                confianzas.append(1.0 / (1.0 + confianza))
+        
+        if confianzas:
+            resultado_combinado["confianza_global"] = sum(confianzas) / len(confianzas)
+        else:
+            resultado_combinado["confianza_global"] = 0.5
+        
+        return resultado_combinado
+    
+    def auditar_nodo(self) -> Dict:
+        """Ejecuta auditoría completa del nodo"""
+        inicio = time.time()
+        
+        evento_auditoria = self.ledger.registrar_evento(
+            TipoEvento.AUDITORIA,
+            {
+                "tipo": "auditoria_interna",
+                "timestamp_inicio": datetime.utcnow().isoformat()
+            }
+        )
+        
+        # Auditoría del ledger
+        auditoria_ledger = self.ledger.verificar_integradad()
+        
+        # Auditoría de módulos
+        auditoria_modulos = {}
+        for tipo, modulo in self.modulos.items():
+            auditoria_modulos[tipo.value] = {
+                "estadisticas": modulo.obtener_estadisticas(),
+                "version": modulo.version,
+                "estado": "ACTIVO"
+            }
+        
+        # Auditoría de conexiones
+        auditoria_conexiones = {
+            "nodos_conectados": len(self.conexiones),
+            "nodos_conocidos": len(self.nodos_conocidos),
+            "estado_red": "ACTIVA" if self.ejecutando else "INACTIVA"
+        }
+        
+        # Consolidar resultados
+        resultado_auditoria = {
+            "nodo": self.id,
+            "timestamp": datetime.utcnow().isoformat(),
+            "duracion_auditoria": time.time() - inicio,
+            "ledger": auditoria_ledger,
+            "modulos": auditoria_modulos,
+            "conexiones": auditoria_conexiones,
+            "estadisticas_nodo": self.estadisticas.copy(),
+            "valores_eticos": self.valores_eticos.copy(),
+            "recomendaciones": self._generar_recomendaciones_auditoria(
+                auditoria_ledger,
+                auditoria_modulos
+            )
+        }
+        
+        # Registrar finalización de auditoría
+        self.ledger.registrar_evento(
+            TipoEvento.AUDITORIA,
+            {
+                "tipo": "auditoria_completada",
+                "resultado": resultado_auditoria,
+                "evento_inicio_id": evento_auditoria.id,
+                "duracion": time.time() - inicio
+            }
+        )
+        
+        return resultado_auditoria
+    
+    def _generar_recomendaciones_auditoria(self, ledger_audit: Dict, modulos_audit: Dict) -> List[str]:
+        """Genera recomendaciones basadas en auditoría"""
+        recomendaciones = []
+        
+        # Recomendaciones del ledger
+        if not ledger_audit.get("integro", True):
+            recomendaciones.append("LEDGER_CORRUPTO - Verificar integridad inmediatamente")
+        
+        if ledger_audit.get("total_eventos", 0) > 10000:
+            recomendaciones.append("LEDGER_GRANDE - Considerar compresión o archivado")
+        
+        # Recomendaciones de módulos
+        for modulo, info in modulos_audit.items():
+            stats = info.get("estadisticas", {})
+            errores = stats.get("errores", 0)
+            total = stats.get("procesamientos", 0)
+            
+            if total > 0 and errores / total > 0.1:  # Más del 10% de errores
+                recomendaciones.append(f"MODULO_{modulo}_INESTABLE - Revisar o reiniciar")
+        
+        # Recomendaciones de rendimiento
+        if self.estadisticas.get("errores", 0) > 100:
+            recomendaciones.append("NODO_INESTABLE - Alto número de errores")
+        
+        if not recomendaciones:
+            recomendaciones.append("ESTADO_OPTIMO - Sin acciones requeridas")
+        
+        return recomendaciones
+    
+    def exportar_estado(self) -> Dict:
+        """Exporta estado completo del nodo para auditoría externa"""
+        return {
+            "id": self.id,
+            "nombre": self.nombre,
+            "estado": self.estado.value,
+            "timestamp": datetime.utcnow().isoformat(),
+            "ledger_info": {
+                "total_eventos": len(self.ledger.cadena),
+                "ultimo_hash": self.ledger.cadena[-1].hash_actual if self.ledger.cadena else None,
+                "primer_evento": self.ledger.cadena[0].timestamp if self.ledger.cadena else None,
+                "ultimo_evento": self.ledger.cadena[-1].timestamp if self.ledger.cadena else None
+            },
+            "modulos": [m.value for m in self.modulos.keys()],
+            "estadisticas": self.estadisticas.copy(),
+            "valores_eticos": self.valores_eticos.copy(),
+            "reputacion": self.reputacion,
+            "conexiones": {
+                "activas": len(self.conexiones),
+                "conocidas": len(self.nodos_conocidos)
+            }
+        }
+    
+    def iniciar_red(self, host: str = "localhost", puerto: int = None):
+        """Inicia el servidor P2P del nodo"""
+        if puerto:
+            self.puerto = puerto
+        
+        # Simulación de red (en realidad usaría sockets/asyncio)
+        self.ejecutando = True
+        self.estado = EstadoNodo.ACTIVO
+        
+        print(f"🌐 Nodo {self.nombre} iniciado en {host}:{self.puerto}")
+        
+        # Registrar en ledger
+        self.ledger.registrar_evento(
+            TipoEvento.CONEXION_P2P,
+            {
+                "accion": "inicio_servidor",
+                "host": host,
+                "puerto": self.puerto,
+                "timestamp": datetime.utcnow().isoformat()
+            }
+        )
+    
+    def conectar_a_nodo(self, host: str, puerto: int) -> bool:
+        """Conecta a otro nodo P2P"""
+        # Simulación de conexión
+        nodo_id = f"nodo_{host}:{puerto}"
+        
+        if nodo_id in self.conexiones:
+            return True
+        
+        # Simular conexión exitosa (80% probabilidad)
+        if random.random() < 0.8:
+            self.conexiones[nodo_id] = {
+                "host": host,
+                "puerto": puerto,
+                "conectado_desde": datetime.utcnow(),
+                "estado": "activo"
+            }
+            
+            self.nodos_conocidos.add(nodo_id)
+            
+            # Registrar conexión
+            self.ledger.registrar_evento(
+                TipoEvento.CONEXION_P2P,
+                {
+                    "accion": "conexion_establecida",
+                    "nodo_destino": nodo_id,
+                    "host": host,
+                    "puerto": puerto,
+                    "exito": True
+                }
+            )
+            
+            print(f"🔗 {self.nombre} conectado a {host}:{puerto}")
+            return True
+        
+        else:
+            # Registrar fallo
+            self.ledger.registrar_evento(
+                TipoEvento.CONEXION_P2P,
+                {
+                    "accion": "conexion_fallida",
+                    "nodo_destino": nodo_id,
+                    "host": host,
+                    "puerto": puerto,
+                    "exito": False,
+                    "razon": "simulado"
+                }
+            )
+            
+            return False
+    
+    def detener(self):
+        """Detiene el nodo de manera ordenada"""
+        self.ejecutando = False
+        self.estado = EstadoNodo.INICIANDO
+        
+        # Registrar parada
+        self.ledger.registrar_evento(
+            TipoEvento.CREACION_NODO,
+            {
+                "accion": "detencion_nodo",
+                "timestamp": datetime.utcnow().isoformat(),
+                "estadisticas_finales": self.estadisticas.copy(),
+                "tiempo_activo": self.estadisticas["tiempo_activo"]
+            }
+        )
+        
+        print(f"🛑 Nodo {self.nombre} detenido")
+    
+    def __str__(self) -> str:
+        """Representación legible del nodo"""
+        return (f"NodoP2P({self.nombre}, id={self.id[:8]}..., "
+                f"estado={self.estado.value}, modulos={len(self.modulos)}, "
+                f"conexiones={len(self.conexiones)})")
+
+# ============================================================================
+# 5. RED P2P COMPLETA
+# ============================================================================
+
+class RedP2P:
+    """Gestión de red P2P completa"""
+    
+    def __init__(self):
+        self.nodos: Dict[str, NodoP2P] = {}
+        self.servidor_central = None  # Solo para descubrimiento inicial
+        self.topologia = defaultdict(set)
+        self.estadisticas_red = {
+            "total_nodos": 0,
+            "nodos_activos": 0,
+            "conexiones_totales": 0,
+            "consultas_procesadas": 0,
+            "bytes_transmitidos": 0
+        }
+    
+    def agregar_nodo(self, nodo: NodoP2P) -> bool:
+        """Agrega un nodo a la red"""
+        if nodo.id in self.nodos:
+            return False
+        
+        self.nodos[nodo.id] = nodo
+        self.estadisticas_red["total_nodos"] += 1
+        self.estadisticas_red["nodos_activos"] += 1
+        
+        # Conectar con algunos nodos existentes
+        if len(self.nodos) > 1:
+            otros_nodos = [n for nid, n in self.nodos.items() if nid != nodo.id]
+            # Conectar con hasta 3 nodos aleatorios
+            for otro in random.sample(otros_nodos, min(3, len(otros_nodos))):
+                # Simular conexión
+                nodo.nodos_conocidos.add(otro.id)
+                otro.nodos_conocidos.add(nodo.id)
+                
+                # Actualizar topología
+                self.topologia[nodo.id].add(otro.id)
+                self.topologia[otro.id].add(nodo.id)
+        
+        print(f"➕ Nodo {nodo.nombre} agregado a la red")
+        return True
+    
+    def eliminar_nodo(self, nodo_id: str):
+        """Elimina un nodo de la red"""
+        if nodo_id not in self.nodos:
+            return
+        
+        nodo = self.nodos.pop(nodo_id)
+        nodo.detener()
+        
+        # Actualizar topología
+        if nodo_id in self.topologia:
+            for vecino in self.topologia[nodo_id]:
+                self.topologia[vecino].discard(nodo_id)
+            del self.topologia[nodo_id]
+        
+        self.estadisticas_red["total_nodos"] -= 1
+        self.estadisticas_red["nodos_activos"] -= 1
+        
+        print(f"➖ Nodo {nodo.nombre} eliminado de la red")
+    
+    def procesar_consulta_distribuida(self, consulta: Dict, nodo_inicial_id: str = None) -> Dict:
+        """Procesa consulta distribuida en la red"""
+        if not self.nodos:
+            raise ValueError("No hay nodos en la red")
+        
+        # Seleccionar nodo inicial
+        if nodo_inicial_id and nodo_inicial_id in self.nodos:
+            nodo_inicial = self.nodos[nodo_inicial_id]
+        else:
+            nodo_inicial = random.choice(list(self.nodos.values()))
+        
+        # Procesar en nodo inicial
+        resultado_inicial = nodo_inicial.procesar_consulta(consulta)
+        
+        # Si hay módulos especializados necesarios, buscar en otros nodos
+        resultados_distribuidos = {"inicial": resultado_inicial}
+        
+        tipo_consulta = consulta.get("tipo", "").lower()
+        if tipo_consulta in ["auditoria_judicial", "auditoria_medios", "analisis_complejo"]:
+            # Buscar nodos especializados
+            for nodo_id, nodo in self.nodos.items():
+                if nodo_id == nodo_inicial.id:
+                    continue
+                
+                # Verificar si tiene módulos relevantes
+                modulos_relevantes = nodo._determinar_modulos_necesarios(consulta)
+                tiene_modulos = any(m in nodo.modulos for m in modulos_relevantes)
+                
+                if tiene_modulos and random.random() < 0.5:  # 50% de probabilidad
+                    try:
+                        resultado = nodo.procesar_consulta(consulta)
+                        resultados_distribuidos[nodo_id] = resultado
+                    except Exception as e:
+                        resultados_distribuidos[nodo_id] = {"error": str(e)}
+        
+        # Consolidar resultados
+        resultado_final = self._consolidar_resultados_distribuidos(resultados_distribuidos)
+        
+        # Actualizar estadísticas
+        self.estadisticas_red["consultas_procesadas"] += 1
+        
+        return resultado_final
+    
+    def _consolidar_resultados_distribuidos(self, resultados: Dict[str, Dict]) -> Dict:
+        """Consolida resultados de múltiples nodos"""
+        if not resultados:
+            return {"error": "No hay resultados"}
+        
+        # Contar éxitos vs errores
+        exitos = [r for r in resultados.values() if not r.get("error")]
+        errores = [r for r in resultados.values() if r.get("error")]
+        
+        # Tomar el mejor resultado (mayor confianza)
+        mejor_resultado = None
+        mejor_confianza = -1
+        
+        for nodo_id, resultado in resultados.items():
+            if "error" in resultado:
+                continue
+            
+            confianza = resultado.get("auditoria", {}).get("confianza_global", 0.5)
+            if confianza > mejor_confianza:
+                mejor_confianza = confianza
+                mejor_resultado = resultado
+        
+        if mejor_resultado is None and exitos:
+            mejor_resultado = exitos[0]
+        
+        return {
+            "resultado_consolidado": mejor_resultado,
+            "metadatos_distribucion": {
+                "total_nodos_consultados": len(resultados),
+                "nodos_exitosos": len(exitos),
+                "nodos_con_error": len(errores),
+                "mejor_confianza": mejor_confianza,
+                "nodos_participantes": list(resultados.keys())
+            },
+            "resultados_completos": resultados
+        }
+    
+    def ejecutar_auditoria_red(self) -> Dict:
+        """Ejecuta auditoría completa de la red"""
+        resultados = {}
+        
+        for nodo_id, nodo in self.nodos.items():
+            try:
+                resultado = nodo.auditar_nodo()
+                resultados[nodo_id] = resultado
+            except Exception as e:
+                resultados[nodo_id] = {"error": str(e)}
+        
+        # Analizar salud de la red
+        nodos_sanos = [r for r in resultados.values() if not r.get("error")]
+        nodos_con_error = [r for r in resultados.values() if r.get("error")]
+        
+        # Verificar consistencia de ledgers
+        hashes_ledger = []
+        for nodo_id, resultado in resultados.items():
+            if "error" not in resultado:
+                ledger_info = resultado.get("ledger", {})
+                if ledger_info.get("integro", False):
+                    hashes_ledger.append(ledger_info.get("ultimo_hash"))
+        
+        consistencia_ledger = len(set(hashes_ledger)) <= 1
+        
+        return {
+            "timestamp": datetime.utcnow().isoformat(),
+            "estadisticas_red": self.estadisticas_red.copy(),
+            "resultados_auditoria": resultados,
+            "resumen_salud": {
+                "total_nodos": len(resultados),
+                "nodos_sanos": len(nodos_sanos),
+                "nodos_con_error": len(nodos_con_error),
+                "porcentaje_sanos": len(nodos_sanos) / len(resultados) if resultados else 0,
+                "consistencia_ledger": consistencia_ledger
+            },
+            "recomendaciones_red": self._generar_recomendaciones_red(resultados)
+        }
+    
+    def _generar_recomendaciones_red(self, resultados_auditoria: Dict) -> List[str]:
+        """Genera recomendaciones para la red completa"""
+        recomendaciones = []
+        
+        # Contar nodos con problemas
+        problemas = {
+            "ledger_corrupto": 0,
+            "modulos_inestables": 0,
+            "alto_errores": 0
+        }
+        
+        for nodo_id, resultado in resultados_auditoria.items():
+            if "error" in resultado:
+                continue
+            
+            # Contar problemas de ledger
+            ledger = resultado.get("ledger", {})
+            if not ledger.get("integro", True):
+                problemas["ledger_corrupto"] += 1
+            
+            # Contar problemas de módulos
+            modulos = resultado.get("modulos", {})
+            for modulo, info in modulos.items():
+                stats = info.get("estadisticas", {})
+                errores = stats.get("errores", 0)
+                total = stats.get("procesamientos", 0)
+                
+                if total > 0 and errores / total > 0.1:
+                    problemas["modulos_inestables"] += 1
+                    break
+            
+            # Contar nodos con muchos errores
+            stats_nodo = resultado.get("estadisticas_nodo", {})
+            if stats_nodo.get("errores", 0) > 100:
+                problemas["alto_errores"] += 1
+        
+        # Generar recomendaciones basadas en problemas
+        total_nodos = len([r for r in resultados_auditoria.values() if "error" not in r])
+        
+        if problemas["ledger_corrupto"] > 0:
+            recomendaciones.append(f"RESINCRONIZAR_LEDGER - {problemas['ledger_corrupto']} nodo(s) corrupto(s)")
+        
+        if problemas["modulos_inestables"] / total_nodos > 0.3:
+            recomendaciones.append("ACTUALIZAR_MODULOS - Más del 30% de módulos inestables")
+        
+        if problemas["alto_errores"] / total_nodos > 0.2:
+            recomendaciones.append("INVESTIGAR_ERRORES - Muchos nodos con alta tasa de errores")
+        
+        # Verificar diversidad de módulos
+        modulos_unicos = set()
+        for nodo_id, resultado in resultados_auditoria.items():
+            if "error" not in resultado:
+                modulos = resultado.get("modulos", {})
+                modulos_unicos.update(modulos.keys())
+        
+        if len(modulos_unicos) < 3:
+            recomendaciones.append("BAJA_DIVERSIDAD - Pocos tipos de módulos en la red")
+        
+        if not recomendaciones:
+            recomendaciones.append("RED_SANA - Sin problemas críticos detectados")
+        
+        return recomendaciones
+    
+    def obtener_informe_publico(self) -> Dict:
+        """Genera informe público de la red"""
+        return {
+            "red": "Sistema P2P de IA Auditale",
+            "version": "1.0.0",
+            "timestamp": datetime.utcnow().isoformat(),
+            "estadisticas": self.estadisticas_red.copy(),
+            "topologia": {
+                "total_nodos": len(self.nodos),
+                "conexiones_totales": sum(len(v) for v in self.topologia.values()) // 2,
+                "grado_promedio": sum(len(v) for v in self.topologia.values()) / len(self.topologia) if self.topologia else 0,
+                "nodos_aislados": len([n for n in self.nodos if n not in self.topologia or len(self.topologia[n]) == 0])
+            },
+            "transparencia": {
+                "ledgers_auditables": len(self.nodos),
+                "nodos_con_valores_eticos": len([n for n in self.nodos.values() if hasattr(n, 'valores_eticos')]),
+                "modulos_especializados_total": sum(len(n.modulos) for n in self.nodos.values())
+            },
+            "enlace_auditoria": "https://auditoria.red-p2p.org/"  # Simulado
+        }
+
+# ============================================================================
+# 6. SISTEMA DE MONITOREO Y VISUALIZACIÓN
+# ============================================================================
+
+class MonitorSistema:
+    """Monitor en tiempo real del sistema completo"""
+    
+    def __init__(self, red: RedP2P):
+        self.red = red
+        self.historico = {
+            "consultas": deque(maxlen=1000),
+            "errores": deque(maxlen=1000),
+            "auditorias": deque(maxlen=100),
+            "estadisticas_nodos": deque(maxlen=100)
+        }
+        self.metricas_tiempo_real = {}
+    
+    def actualizar_metricas(self):
+        """Actualiza métricas en tiempo real"""
+        if not self.red.nodos:
+            return
+        
+        # Métricas de red
+        self.metricas_tiempo_real = {
+            "red": {
+                "nodos_activos": len(self.red.nodos),
+                "consultas_por_minuto": self._calcular_cpm(),
+                "latencia_promedio": self._calcular_latencia_promedio(),
+                "disponibilidad": self._calcular_disponibilidad()
+            },
+            "nodos": {},
+            "alertas": []
+        }
+        
+        # Métricas por nodo
+        for nodo_id, nodo in self.red.nodos.items():
+            try:
+                estado_nodo = {
+                    "nombre": nodo.nombre,
+                    "estado": nodo.estado.value,
+                    "consultas_procesadas": nodo.estadisticas.get("consultas_procesadas", 0),
+                    "errores": nodo.estadisticas.get("errores", 0),
+                    "reputacion": nodo.reputacion,
+                    "modulos_activos": len(nodo.modulos),
+                    "conexiones": len(nodo.conexiones)
+                }
+                
+                # Verificar alertas
+                alertas_nodo = self._verificar_alertas_nodo(nodo)
+                if alertas_nodo:
+                    estado_nodo["alertas"] = alertas_nodo
+                    self.metricas_tiempo_real["alertas"].extend(alertas_nodo)
+                
+                self.metricas_tiempo_real["nodos"][nodo_id] = estado_nodo
+                
+            except Exception as e:
+                self.metricas_tiempo_real["nodos"][nodo_id] = {"error": str(e)}
+        
+        # Guardar en histórico
+        self.historico["estadisticas_nodos"].append({
+            "timestamp": datetime.utcnow().isoformat(),
+            "metricas": self.metricas_tiempo_real.copy()
+        })
+    
+    def _calcular_cpm(self) -> float:
+        """Calcula consultas por minuto"""
+        consultas_recientes = [c for c in self.historico["consultas"] 
+                              if (datetime.utcnow() - c["timestamp"]).total_seconds() < 60]
+        return len(consultas_recientes)
+    
+    def _calcular_latencia_promedio(self) -> float:
+        """Calcula latencia promedio de procesamiento"""
+        if not self.historico["consultas"]:
+            return 0.0
+        
+        latencias = [c.get("tiempo_procesamiento", 0) 
+                    for c in self.historico["consultas"]]
+        return sum(latencias) / len(latencias) if latencias else 0.0
+    
+    def _calcular_disponibilidad(self) -> float:
+        """Calcula disponibilidad del sistema"""
+        if not self.red.nodos:
+            return 0.0
+        
+        nodos_activos = sum(1 for n in self.red.nodos.values() 
+                           if n.estado == EstadoNodo.ACTIVO)
+        return nodos_activos / len(self.red.nodos)
+    
+    def _verificar_alertas_nodo(self, nodo: NodoP2P) -> List[Dict]:
+        """Verifica condiciones de alerta para un nodo"""
+        alertas = []
+        
+        # Alertas por errores
+        if nodo.estadisticas.get("errores", 0) > 50:
+            alertas.append({
+                "nivel": "ALTO",
+                "tipo": "ERRORES_ELEVADOS",
+                "nodo": nodo.id,
+                "detalle": f"{nodo.estadisticas['errores']} errores acumulados",
+                "timestamp": datetime.utcnow().isoformat()
+            })
+        
+        # Alertas por reputación baja
+        if nodo.reputacion < 0.3:
+            alertas.append({
+                "nivel": "MEDIO",
+                "tipo": "REPUTACION_BAJA",
+                "nodo": nodo.id,
+                "detalle": f"Reputación: {nodo.reputacion:.2f}",
+                "timestamp": datetime.utcnow().isoformat()
+            })
+        
+        # Alertas por inactividad (simulada)
+        if nodo.estadisticas.get("consultas_recibidas", 0) == 0:
+            tiempo_creacion = nodo.ledger.cadena[0].timestamp if nodo.ledger.cadena else datetime.utcnow()
+            minutos_inactivo = (datetime.utcnow() - tiempo_creacion).total_seconds() / 60
+            
+            if minutos_inactivo > 5:  # 5 minutos sin actividad
+                alertas.append({
+                    "nivel": "BAJO",
+                    "tipo": "INACTIVIDAD",
+                    "nodo": nodo.id,
+                    "detalle": f"{minutos_inactivo:.1f} minutos sin actividad",
+                    "timestamp": datetime.utcnow().isoformat()
+                })
+        
+        return alertas
+    
+    def registrar_consulta(self, consulta: Dict, resultado: Dict):
+        """Registra una consulta procesada"""
+        self.historico["consultas"].append({
+            "timestamp": datetime.utcnow(),
+            "consulta_tipo": consulta.get("tipo", "desconocido"),
+            "nodo_procesador": resultado.get("auditoria", {}).get("nodo_procesador"),
+            "tiempo_procesamiento": resultado.get("auditoria", {}).get("tiempo_procesamiento", 0),
+            "exito": "error" not in resultado
+        })
+    
+    def registrar_error(self, error: Exception, contexto: Dict = None):
+        """Registra un error del sistema"""
+        self.historico["errores"].append({
+            "timestamp": datetime.utcnow(),
+            "error": str(error),
+            "tipo": type(error).__name__,
+            "contexto": contexto or {}
+        })
+    
+    def obtener_dashboard(self) -> Dict:
+        """Genera datos para dashboard en tiempo real"""
+        self.actualizar_metricas()
+        
+        return {
+            "timestamp": datetime.utcnow().isoformat(),
+            "metricas_tiempo_real": self.metricas_tiempo_real,
+            "historico": {
+                "total_consultas": len(self.historico["consultas"]),
+                "total_errores": len(self.historico["errores"]),
+                "consultas_ultima_hora": len([c for c in self.historico["consultas"] 
+                                             if (datetime.utcnow() - c["timestamp"]).total_seconds() < 3600]),
+                "errores_ultima_hora": len([e for e in self.historico["errores"] 
+                                           if (datetime.utcnow() - e["timestamp"]).total_seconds() < 3600])
+            },
+            "alertas_activas": self.metricas_tiempo_real.get("alertas", [])
+        }
+
+# ============================================================================
+# 7. EJEMPLO DE USO COMPLETO
+# ============================================================================
+
+def demostracion_sistema_completo():
+    """Demuestra el funcionamiento completo del sistema"""
+    print("=" * 80)
+    print("DEMOSTRACIÓN DEL SISTEMA P2P DE IA AUDITABLE")
+    print("=" * 80)
+    
+    # 1. Crear red P2P
+    print("\n1. 🏗️  CREANDO RED P2P...")
+    red = RedP2P()
+    
+    # 2. Crear nodos
+    print("\n2. 🧱 CREANDO NODOS...")
+    nodos = []
+    for i in range(5):
+        nombre = f"Nodo_{i+1}"
+        nodo = NodoP2P(nombre)
+        nodo.iniciar_red(puerto=8000 + i)
+        red.agregar_nodo(nodo)
+        nodos.append(nodo)
+        print(f"   - {nombre} creado (módulos: {list(nodo.modulos.keys())})")
+    
+    # 3. Conectar nodos
+    print("\n3. 🔗 CONECTANDO NODOS...")
+    for i, nodo in enumerate(nodos):
+        if i < len(nodos) - 1:
+            # Conectar con siguiente nodo (simulado)
+            nodo_siguiente = nodos[i + 1]
+            exito = nodo.conectar_a_nodo("localhost", nodo_siguiente.puerto)
+            if exito:
+                print(f"   - {nodo.nombre} → {nodo_siguiente.nombre}")
+    
+    # 4. Crear monitor
+    print("\n4. 📊 INICIANDO MONITOR...")
+    monitor = MonitorSistema(red)
+    
+    # 5. Procesar consultas de ejemplo
+    print("\n5. 🧪 PROCESANDO CONSULTAS DE EJEMPLO...")
+    
+    consultas = [
+        {
+            "id": "consulta_1",
+            "tipo": "auditoria_judicial",
+            "datos": """
+                En la ciudad de Madrid, a 15 de enero de 2024.
+                VISTO el presente procedimiento seguido contra D. Juan Pérez García,
+                hombre de 45 años, reincidente en delitos similares...
+                
+                CONSIDERANDO los atenuantes de confesión y reparación del daño...
+                
+                FALLO: Condeno al acusado a 3 años de prisión...
+            """
+        },
+        {
+            "id": "consulta_2", 
+            "tipo": "auditoria_medios",
+            "datos": """
+                ¡Escándalo absoluto! El gobierno nos oculta la verdad sobre la economía.
+                Todos saben que estamos en crisis, pero ellos siguen mintiendo.
+                O estás con los ciudadanos o eres un traidor al pueblo.
+                No hay datos concretos porque quieren esconder la realidad.
+            """
+        },
+        {
+            "id": "consulta_3",
+            "tipo": "texto",
+            "datos": "Analiza este texto para detectar posibles sesgos y framing."
+        }
+    ]
+    
+    resultados_consultas = []
+    for i, consulta in enumerate(consultas):
+        print(f"\n   📝 Consulta {i+1}: {consulta['tipo']}")
+        
+        # Seleccionar nodo aleatorio
+        nodo_aleatorio = random.choice(nodos)
+        print(f"   🎯 Nodo seleccionado: {nodo_aleatorio.nombre}")
+        
+        try:
+            resultado = nodo_aleatorio.procesar_consulta(consulta)
+            
+            # Registrar en monitor
+            monitor.registrar_consulta(consulta, resultado)
+            
+            # Extraer información clave
+            if "auditoria" in resultado:
+                tiempo = resultado["auditoria"].get("tiempo_procesamiento", 0)
+                hash_res = resultado["auditoria"].get("hash_resultado", "N/A")
+                print(f"   ✅ Procesado en {tiempo:.3f}s | Hash: {hash_res}")
+            
+            if "resumen" in resultado:
+                for modulo, resumen in resultado["resumen"].items():
+                    if isinstance(resumen, dict) and "nivel_riesgo" in resumen:
+                        print(f"   ⚠️  {modulo}: {resumen['nivel_riesgo']}")
+            
+            resultados_consultas.append(resultado)
+            
+        except Exception as e:
+            print(f"   ❌ Error: {e}")
+            monitor.registrar_error(e, {"consulta": consulta})
+    
+    # 6. Ejecutar auditoría completa
+    print("\n6. 🔍 EJECUTANDO AUDITORÍA COMPLETA DE LA RED...")
+    auditoria_red = red.ejecutar_auditoria_red()
+    
+    if "resumen_salud" in auditoria_red:
+        salud = auditoria_red["resumen_salud"]
+        print(f"   📈 Salud de la red:")
+        print(f"      • Nodos totales: {salud['total_nodos']}")
+        print(f"      • Nodos sanos: {salud['nodos_sanos']}")
+        print(f"      • Porcentaje sanos: {salud['porcentaje_sanos']*100:.1f}%")
+        print(f"      • Consistencia ledger: {'✅' if salud['consistencia_ledger'] else '❌'}")
+    
+    # 7. Mostrar dashboard
+    print("\n7. 📈 DASHBOARD EN TIEMPO REAL...")
+    dashboard = monitor.obtener_dashboard()
+    
+    if "metricas_tiempo_real" in dashboard:
+        metricas = dashboard["metricas_tiempo_real"]["red"]
+        print(f"   📊 Métricas de red:")
+        print(f"      • Nodos activos: {metricas.get('nodos_activos', 0)}")
+        print(f"      • Consultas/minuto: {metricas.get('consultas_por_minuto', 0):.1f}")
+        print(f"      • Disponibilidad: {metricas.get('disponibilidad', 0)*100:.1f}%")
+    
+    if dashboard.get("alertas_activas"):
+        print(f"   🚨 Alertas activas: {len(dashboard['alertas_activas'])}")
+        for alerta in dashboard["alertas_activas"][:3]:  # Mostrar solo 3
+            print(f"      • {alerta['nivel']}: {alerta['tipo']} en {alerta['nodo']}")
+    
+    # 8. Mostrar informe público
+    print("\n8. 🌐 INFORME PÚBLICO DE TRANSPARENCIA...")
+    informe = red.obtener_informe_publico()
+    
+    print(f"   🔗 {informe['red']} v{informe['version']}")
+    print(f"   📅 {informe['timestamp']}")
+    print(f"   👥 Nodos: {informe['estadisticas'].get('total_nodos', 0)}")
+    print(f"   🔗 Conexiones: {informe['topologia'].get('conexiones_totales', 0)}")
+    print(f"   📄 Ledgers auditables: {informe['transparencia'].get('ledgers_auditables', 0)}")
+    print(f"   ⚖️  Nodos con valores éticos: {informe['transparencia'].get('nodos_con_valores_eticos', 0)}")
+    print(f"   🧩 Módulos especializados: {informe['transparencia'].get('modulos_especializados_total', 0)}")
+    
+    # 9. Verificar integridad de un nodo
+    print("\n9. ✅ VERIFICANDO INTEGRIDAD DE UN NODO...")
+    if nodos:
+        nodo_ejemplo = nodos[0]
+        integridad = nodo_ejemplo.ledger.verificar_integridad()
+        
+        print(f"   🧾 Nodo: {nodo_ejemplo.nombre}")
+        print(f"   📊 Eventos en ledger: {integridad['total_eventos']}")
+        print(f"   🔒 Integridad: {'✅ VERIFICADA' if integridad['integro'] else '❌ COMPROMETIDA'}")
+        
+        if integridad['errores']:
+            print(f"   ⚠️  Errores: {len(integridad['errores'])}")
+        else:
+            print(f"   🎉 Sin errores de integridad")
+        
+        print(f"   🏷️  Último hash: {integridad['ultimo_hash'][:16]}...")
+    
+    # 10. Exportar estado para auditoría externa
+    print("\n10. 📤 EXPORTANDO ESTADO PARA AUDITORÍA EXTERNA...")
+    if nodos:
+        estado_exportado = nodos[0].exportar_estado()
+        print(f"   📁 Nodo exportado: {estado_exportado['nombre']}")
+        print(f"   🧮 Eventos ledger: {estado_exportado['ledger_info']['total_eventos']}")
+        print(f"   ⚖️  Valores éticos: {', '.join(f'{k}: {v:.2f}' for k, v in estado_exportado['valores_eticos'].items())}")
+        print(f"   📈 Reputación: {estado_exportado['reputacion']:.2f}")
+    
+    print("\n" + "=" * 80)
+    print("DEMOSTRACIÓN COMPLETADA ✅")
+    print("=" * 80)
+    
+    # Limpiar
+    for nodo in nodos:
+        nodo.detener()
+    
+    return {
+        "red": red,
+        "nodos": nodos,
+        "monitor": monitor,
+        "resultados_consultas": resultados_consultas,
+        "auditoria_red": auditoria_red
+    }
+
+# ============================================================================
+# 8. INTERFAZ DE LÍNEA DE COMANDOS
+# ============================================================================
+
+def interfaz_comandos():
+    """Interfaz de línea de comandos para el sistema"""
+    import cmd
+    import shlex
+    
+    class InterfazP2P(cmd.Cmd):
+        intro = """
+╔══════════════════════════════════════════════════════════════╗
+║   SISTEMA P2P DE IA AUDITABLE - INTERFAZ DE COMANDOS         ║
+║   Versión 1.0.0 - Escriba 'help' o '?' para comandos         ║
+╚══════════════════════════════════════════════════════════════╝
+"""
+        prompt = "p2p-ia> "
+        
+        def __init__(self):
+            super().__init__()
+            self.red = RedP2P()
+            self.monitor = MonitorSistema(self.red)
+            self.nodo_actual = None
+        
+        def do_crear_nodo(self, arg):
+            """crear_nodo <nombre> [puerto] - Crea un nuevo nodo"""
+            args = shlex.split(arg)
+            if not args:
+                print("❌ Error: Se requiere nombre del nodo")
+                return
+            
+            nombre = args[0]
+            puerto = int(args[1]) if len(args) > 1 else random.randint(8000, 9000)
+            
+            try:
+                nodo = NodoP2P(nombre, puerto)
+                nodo.iniciar_red(puerto=puerto)
+                self.red.agregar_nodo(nodo)
+                
+                if self.nodo_actual is None:
+                    self.nodo_actual = nodo
+                
+                print(f"✅ Nodo '{nombre}' creado en puerto {puerto}")
+                print(f"   ID: {nodo.id}")
+                print(f"   Módulos: {[m.value for m in nodo.modulos.keys()]}")
+                
+            except Exception as e:
+                print(f"❌ Error creando nodo: {e}")
+        
+        def do_conectar(self, arg):
+            """conectar <host> <puerto> - Conecta a otro nodo"""
+            if self.nodo_actual is None:
+                print("❌ Error: No hay nodo actual seleccionado")
+                return
+            
+            args = shlex.split(arg)
+            if len(args) < 2:
+                print("❌ Error: Se requiere host y puerto")
+                return
+            
+            host, puerto = args[0], int(args[1])
+            
+            try:
+                exito = self.nodo_actual.conectar_a_nodo(host, puerto)
+                if exito:
+                    print(f"✅ Conectado a {host}:{puerto}")
+                else:
+                    print(f"❌ No se pudo conectar a {host}:{puerto}")
+                    
+            except Exception as e:
+                print(f"❌ Error de conexión: {e}")
+        
+        def do_procesar(self, arg):
+            """procesar <tipo> <datos> - Procesa una consulta"""
+            if self.nodo_actual is None:
+                print("❌ Error: No hay nodo actual seleccionado")
+                return
+            
+            args = shlex.split(arg)
+            if len(args) < 2:
+                print("❌ Error: Se requiere tipo y datos")
+                return
+            
+            tipo, datos = args[0], " ".join(args[1:])
+            
+            consulta = {
+                "id": f"cmd_{int(time.time())}",
+                "tipo": tipo,
+                "datos": datos
+            }
+            
+            try:
+                print(f"🔍 Procesando consulta tipo '{tipo}'...")
+                resultado = self.nodo_actual.procesar_consulta(consulta)
+                
+                # Registrar en monitor
+                self.monitor.registrar_consulta(consulta, resultado)
+                
+                # Mostrar resumen
+                print(f"✅ Consulta procesada exitosamente")
+                
+                if "auditoria" in resultado:
+                    audit = resultado["auditoria"]
+                    print(f"   ⏱️  Tiempo: {audit.get('tiempo_procesamiento', 0):.3f}s")
+                    print(f"   🔗 Hash: {audit.get('hash_resultado', 'N/A')}")
+                    print(f"   🧩 Módulos: {', '.join(audit.get('modulos_usados', []))}")
+                
+                if "resumen" in resultado:
+                    print(f"   📋 Resumen:")
+                    for modulo, resumen in resultado["resumen"].items():
+                        if isinstance(resumen, dict):
+                            if "nivel_riesgo" in resumen:
+                                print(f"      • {modulo}: {resumen['nivel_riesgo']}")
+                            elif isinstance(resumen, dict):
+                                # Mostrar primer par clave-valor
+                                for k, v in list(resumen.items())[:2]:
+                                    print(f"      • {modulo}.{k}: {v}")
+                
+            except Exception as e:
+                print(f"❌ Error procesando consulta: {e}")
+                self.monitor.registrar_error(e, {"consulta": consulta})
+        
+        def do_auditar(self, arg):
+            """auditar - Ejecuta auditoría del nodo actual"""
+            if self.nodo_actual is None:
+                print("❌ Error: No hay nodo actual seleccionado")
+                return
+            
+            try:
+                print(f"🔍 Ejecutando auditoría del nodo '{self.nodo_actual.nombre}'...")
+                resultado = self.nodo_actual.auditar_nodo()
+                
+                print(f"✅ Auditoría completada")
+                print(f"   🧾 Eventos ledger: {resultado.get('ledger', {}).get('total_eventos', 0)}")
+                print(f"   🔒 Integridad: {'✅ VERIFICADA' if resultado.get('ledger', {}).get('integro') else '❌ COMPROMETIDA'}")
+                print(f"   🧩 Módulos auditados: {len(resultado.get('modulos', {}))}")
+                
+                # Mostrar recomendaciones
+                if resultado.get('recomendaciones'):
+                    print(f"   💡 Recomendaciones:")
+                    for rec in resultado['recomendaciones'][:3]:  # Mostrar solo 3
+                        print(f"      • {rec}")
+                
+            except Exception as e:
+                print(f"❌ Error en auditoría: {e}")
+        
+        def do_red_auditar(self, arg):
+            """red_auditar - Ejecuta auditoría completa de la red"""
+            try:
+                print("🔍 Ejecutando auditoría completa de la red...")
+                resultado = self.red.ejecutar_auditoria_red()
+                
+                salud = resultado.get('resumen_salud', {})
+                print(f"✅ Auditoría de red completada")
+                print(f"   👥 Nodos totales: {salud.get('total_nodos', 0)}")
+                print(f"   ✅ Nodos sanos: {salud.get('nodos_sanos', 0)}")
+                print(f"   📊 Porcentaje sanos: {salud.get('porcentaje_sanos', 0)*100:.1f}%")
+                print(f"   🔗 Consistencia ledger: {'✅' if salud.get('consistencia_ledger') else '❌'}")
+                
+                # Mostrar recomendaciones
+                if resultado.get('recomendaciones_red'):
+                    print(f"   💡 Recomendaciones para la red:")
+                    for rec in resultado['recomendaciones_red'][:3]:
+                        print(f"      • {rec}")
+                
+            except Exception as e:
+                print(f"❌ Error en auditoría de red: {e}")
+        
+        def do_estado(self, arg):
+            """estado - Muestra estado del nodo actual"""
+            if self.nodo_actual is None:
+                print("❌ Error: No hay nodo actual seleccionado")
+                return
+            
+            estado = self.nodo_actual.exportar_estado()
+            
+            print(f"📊 ESTADO DEL NODO '{self.nodo_actual.nombre}':")
+            print(f"   🆔 ID: {estado['id']}")
+            print(f"   🚦 Estado: {estado['estado']}")
+            print(f"   ⭐ Reputación: {estado['reputacion']:.2f}")
+            print(f"   🧩 Módulos: {len(estado.get('modulos', []))}")
+            print(f"   📊 Estadísticas:")
+            print(f"      • Consultas procesadas: {estado['estadisticas'].get('consultas_procesadas', 0)}")
+            print(f"      • Consultas recibidas: {estado['estadisticas'].get('consultas_recibidas', 0)}")
+            print(f"      • Errores: {estado['estadisticas'].get('errores', 0)}")
+            print(f"   ⚖️  Valores éticos:")
+            for k, v in estado['valores_eticos'].items():
+                print(f"      • {k}: {v:.2f}")
+            print(f"   🔗 Conexiones: {estado['conexiones']['activas']} activas, "
+                  f"{estado['conexiones']['conocidas']} conocidas")
+        
+        def do_dashboard(self, arg):
+            """dashboard - Muestra dashboard en tiempo real"""
+            dashboard = self.monitor.obtener_dashboard()
+            
+            print(f"📈 DASHBOARD EN TIEMPO REAL:")
+            print(f"   🕐 Timestamp: {dashboard.get('timestamp', 'N/A')}")
+            
+            metricas = dashboard.get('metricas_tiempo_real', {}).get('red', {})
+            if metricas:
+                print(f"   🌐 Red:")
+                print(f"      • Nodos activos: {metricas.get('nodos_activos', 0)}")
+                print(f"      • Consultas/minuto: {metricas.get('consultas_por_minuto', 0):.1f}")
+                print(f"      • Disponibilidad: {metricas.get('disponibilidad', 0)*100:.1f}%")
+            
+            historico = dashboard.get('historico', {})
+            if historico:
+                print(f"   📊 Histórico:")
+                print(f"      • Total consultas: {historico.get('total_consultas', 0)}")
+                print(f"      • Total errores: {historico.get('total_errores', 0)}")
+                print(f"      • Consultas última hora: {historico.get('consultas_ultima_hora', 0)}")
+                print(f"      • Errores última hora: {historico.get('errores_ultima_hora', 0)}")
+            
+            alertas = dashboard.get('alertas_activas', [])
+            if alertas:
+                print(f"   🚨 Alertas activas ({len(alertas)}):")
+                for alerta in alertas[:5]:  # Mostrar solo 5
+                    nivel = alerta.get('nivel', 'DESCONOCIDO')
+                    tipo = alerta.get('tipo', 'DESCONOCIDO')
+                    nodo = alerta.get('nodo', 'DESCONOCIDO')
+                    print(f"      • [{nivel}] {tipo} en {nodo}")
+            else:
+                print(f"   ✅ Sin alertas activas")
+        
+        def do_seleccionar(self, arg):
+            """seleccionar <nombre_nodo> - Selecciona un nodo como actual"""
+            args = shlex.split(arg)
+            if not args:
+                print("❌ Error: Se requiere nombre del nodo")
+                return
+            
+            nombre = args[0]
+            
+            # Buscar nodo por nombre
+            encontrado = None
+            for nodo_id, nodo in self.red.nodos.items():
+                if nodo.nombre == nombre:
+                    encontrado = nodo
+                    break
+            
+            if encontrado:
+                self.nodo_actual = encontrado
+                print(f"✅ Nodo '{nombre}' seleccionado como actual")
+            else:
+                print(f"❌ No se encontró nodo con nombre '{nombre}'")
+        
+        def do_listar(self, arg):
+            """listar - Lista todos los nodos en la red"""
+            print(f"📋 NODOS EN LA RED ({len(self.red.nodos)}):")
+            
+            for i, (nodo_id, nodo) in enumerate(self.red.nodos.items()):
+                actual = " ← ACTUAL" if nodo == self.nodo_actual else ""
+                print(f"   {i+1}. {nodo.nombre} (ID: {nodo_id[:8]}...){actual}")
+                print(f"      Estado: {nodo.estado.value}")
+                print(f"      Módulos: {[m.value for m in nodo.modulos.keys()]}")
+                print(f"      Conexiones: {len(nodo.conexiones)}")
+                print()
+        
+        def do_informe(self, arg):
+            """informe - Genera informe público de transparencia"""
+            informe = self.red.obtener_informe_publico()
+            
+            print(f"🌐 INFORME PÚBLICO DE TRANSPARENCIA:")
+            print(f"   🔗 {informe['red']} v{informe['version']}")
+            print(f"   📅 {informe['timestamp']}")
+            print(f"   📊 Estadísticas:")
+            print(f"      • Nodos totales: {informe['estadisticas'].get('total_nodos', 0)}")
+            print(f"      • Nodos activos: {informe['estadisticas'].get('nodos_activos', 0)}")
+            print(f"      • Consultas procesadas: {informe['estadisticas'].get('consultas_procesadas', 0)}")
+            print(f"   🌐 Topología:")
+            print(f"      • Conexiones totales: {informe['topologia'].get('conexiones_totales', 0)}")
+            print(f"      • Grado promedio: {informe['topologia'].get('grado_promedio', 0):.2f}")
+            print(f"      • Nodos aislados: {informe['topologia'].get('nodos_aislados', 0)}")
+            print(f"   🔍 Transparencia:")
+            print(f"      • Ledgers auditables: {informe['transparencia'].get('ledgers_auditables', 0)}")
+            print(f"      • Nodos con valores éticos: {informe['transparencia'].get('nodos_con_valores_eticos', 0)}")
+            print(f"      • Módulos especializados: {informe['transparencia'].get('modulos_especializados_total', 0)}")
+            print(f"   📎 Enlace auditoría: {informe.get('enlace_auditoria', 'N/A')}")
+        
+        def do_salir(self, arg):
+            """salir - Sale del sistema"""
+            print("👋 Cerrando sistema...")
+            
+            # Detener todos los nodos
+            for nodo_id, nodo in self.red.nodos.items():
+                try:
+                    nodo.detener()
+                except:
+                    pass
+            
+            return True
+        
+        def do_verificar(self, arg):
+            """verificar - Verifica integridad del ledger del nodo actual"""
+            if self.nodo_actual is None:
+                print("❌ Error: No hay nodo actual seleccionado")
+                return
+            
+            integridad = self.nodo_actual.ledger.verificar_integridad()
+            
+            print(f"🔍 VERIFICACIÓN DE INTEGRIDAD DEL LEDGER:")
+            print(f"   🧾 Nodo: {self.nodo_actual.nombre}")
+            print(f"   📊 Eventos totales: {integridad['total_eventos']}")
+            print(f"   🔒 Integridad: {'✅ VERIFICADA' if integridad['integro'] else '❌ COMPROMETIDA'}")
+            print(f"   🕐 Primer evento: {integridad['primer_evento']}")
+            print(f"   🕐 Último evento: {integridad['ultimo_evento']}")
+            print(f"   🏷️  Último hash: {integridad['ultimo_hash'][:32]}...")
+            
+            if integridad['errores']:
+                print(f"   ⚠️  Errores ({len(integridad['errores'])}):")
+                for error in integridad['errores'][:3]:  # Mostrar solo 3
+                    print(f"      • {error}")
+            else:
+                print(f"   ✅ Sin errores de integridad")
+        
+        def do_exportar(self, arg):
+            """exportar <archivo> - Exporta estado para auditoría externa"""
+            if self.nodo_actual is None:
+                print("❌ Error: No hay nodo actual seleccionado")
+                return
+            
+            args = shlex.split(arg)
+            archivo = args[0] if args else f"auditoria_{self.nodo_actual.id}.json"
+            
+            try:
+                estado = self.nodo_actual.exportar_estado()
+                
+                # Añadir información del ledger
+                estado['ledger_detallado'] = self.nodo_actual.ledger.exportar_para_auditoria(limite=100)
+                
+                with open(archivo, 'w', encoding='utf-8') as f:
+                    json.dump(estado, f, indent=2, default=str, ensure_ascii=False)
+                
+                print(f"✅ Estado exportado a '{archivo}'")
+                print(f"   📊 Tamaño: {os.path.getsize(archivo) / 1024:.1f} KB")
+                print(f"   🧾 Eventos ledger incluidos: {len(estado['ledger_detallado'])}")
+                
+            except Exception as e:
+                print(f"❌ Error exportando: {e}")
+        
+        def do_demo(self, arg):
+            """demo - Ejecuta demostración completa del sistema"""
+            print("🎬 Iniciando demostración completa...")
+            resultado = demostracion_sistema_completo()
+            print("\n🎉 Demostración completada!")
+        
+        def default(self, line):
+            """Maneja comandos desconocidos"""
+            print(f"❌ Comando desconocido: '{line}'")
+            print("   Escriba 'help' o '?' para ver comandos disponibles")
+        
+        def emptyline(self):
+            """No hacer nada en línea vacía"""
+            pass
+    
+    # Ejecutar interfaz
+    try:
+        import os
+        InterfazP2P().cmdloop()
+    except KeyboardInterrupt:
+        print("\n\n👋 Interrumpido por el usuario")
+    except Exception as e:
+        print(f"❌ Error en interfaz: {e}")
+
+# ============================================================================
+# 9. EJECUCIÓN PRINCIPAL
+# ============================================================================
+
+if __name__ == "__main__":
+    import argparse
+    
+    parser = argparse.ArgumentParser(description="Sistema P2P de IA Auditale")
+    parser.add_argument("--demo", action="store_true", help="Ejecutar demostración completa")
+    parser.add_argument("--cli", action="store_true", help="Iniciar interfaz de comandos")
+    parser.add_argument("--crear-red", type=int, metavar="N", help="Crear red con N nodos")
+    
+    args = parser.parse_args()
+    
+    if args.demo:
+        # Ejecutar demostración completa
+        demostracion_sistema_completo()
+    
+    elif args.cli:
+        # Iniciar interfaz de comandos
+        interfaz_comandos()
+    
+    elif args.crear_red:
+        # Crear red con N nodos
+        print(f"Creando red con {args.crear_red} nodos...")
+        red = RedP2P()
+        
+        for i in range(args.crear_red):
+            nodo = NodoP2P(f"Nodo_{i+1}", puerto=8000 + i)
+            nodo.iniciar_red(puerto=8000 + i)
+            red.agregar_nodo(nodo)
+            print(f"  ✅ Nodo {i+1} creado")
+        
+        print(f"\nRed creada con {len(red.nodos)} nodos")
+        print("Usa --cli para interactuar con la red")
+    
+    else:
+        # Modo por defecto: mostrar ayuda
+        print("""
+╔══════════════════════════════════════════════════════════════╗
+║   SISTEMA P2P DE IA AUDITABLE - "Euskera"                    ║
+║   Arquitectura completa con trazabilidad total               ║
+╚══════════════════════════════════════════════════════════════╝
+
+Comandos disponibles:
+
+  --demo       Ejecutar demostración completa del sistema
+  --cli        Iniciar interfaz interactiva de comandos
+  --crear-red N  Crear una red con N nodos
+
+Características principales:
+
+  • ✅ Ledger distribuido con trazabilidad criptográfica
+  • ✅ Módulos especializados (visión, lenguaje, auditoría judicial, medios)
+  • ✅ Red P2P con descubrimiento automático
+  • ✅ Sistema de reputación y valores éticos
+  • ✅ Auditoría automática continua
+  • ✅ Monitor en tiempo real con dashboard
+  • ✅ Exportación para verificación externa
+  • ✅ Interfaz de comandos interactiva
+
+Ejemplos:
+
+  python sistema_ia_p2p.py --demo
+  python sistema_ia_p2p.py --cli
+  python sistema_ia_p2p.py --crear-red 5
+""")
