@@ -1,0 +1,131 @@
+# Crea esto como primer archivo:
+# setup_sistema_basico.py
+
+import os
+import json
+from datetime import datetime
+
+class SistemaBase:
+    """Punto de partida para nuestro sistema"""
+    
+    def __init__(self, nombre="IA-Auditable"):
+        self.nombre = nombre
+        self.version = "0.1.0"
+        self.fecha_creacion = datetime.now()
+        
+        # Crear estructura de directorios
+        self.crear_estructura()
+        
+        # Inicializar configuración
+        self.config = self.cargar_configuracion()
+        
+        print(f"""
+        ╔══════════════════════════════════════════════════╗
+        ║    SISTEMA P2P DE IA AUDITABLE - INICIANDO       ║
+        ║    Nombre: {self.nombre:30} ║
+        ║    Versión: {self.version:29} ║
+        ╚══════════════════════════════════════════════════╝
+        """)
+    
+    def crear_estructura(self):
+        """Crea la estructura básica de archivos"""
+        directorios = [
+            'modulos',
+            'auditoria',
+            'datos',
+            'config',
+            'tests'
+        ]
+        
+        for directorio in directorios:
+            os.makedirs(directorio, exist_ok=True)
+            print(f"📁 Directorio creado: {directorio}/")
+        
+        # Archivos de configuración inicial
+        config_base = {
+            "sistema": {
+                "nombre": self.nombre,
+                "version": self.version,
+                "fecha_creacion": self.fecha_creacion.isoformat(),
+                "principios_eticos": [
+                    "transparencia_radical",
+                    "auditoria_continua",
+                    "control_distribuido",
+                    "responsabilidad_clara"
+                ]
+            },
+            "red": {
+                "tipo": "p2p",
+                "puerto_base": 8000,
+                "descubrimiento": True,
+                "seeds": []
+            },
+            "modulos_por_defecto": [
+                "auditoria_textos",
+                "analisis_sesgos",
+                "verificacion_fuentes"
+            ]
+        }
+        
+        with open('config/config_base.json', 'w', encoding='utf-8') as f:
+            json.dump(config_base, f, indent=2, ensure_ascii=False)
+        
+        print("📄 Archivo de configuración creado: config/config_base.json")
+    
+    def cargar_configuracion(self):
+        """Carga la configuración"""
+        try:
+            with open('config/config_base.json', 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except:
+            return {}
+    
+    def mostrar_estado(self):
+        """Muestra el estado del sistema"""
+        print(f"""
+        📊 ESTADO DEL SISTEMA:
+        
+        Nombre: {self.nombre}
+        Versión: {self.version}
+        Creado: {self.fecha_creacion.strftime('%Y-%m-%d %H:%M')}
+        
+        📁 Estructura lista:
+        ├── modulos/      (Módulos especializados)
+        ├── auditoria/    (Sistema de auditoría)
+        ├── datos/        (Datos y modelos)
+        ├── config/       (Configuración)
+        └── tests/        (Pruebas)
+        
+        ⚖️ Principios éticos:
+        """)
+        
+        for principio in self.config.get('sistema', {}).get('principios_eticos', []):
+            print(f"   • {principio}")
+        
+        print(f"""
+        🎯 Próximos pasos:
+        1. Añadir primer módulo (modulos/analisis_textos.py)
+        2. Implementar ledger básico (auditoria/ledger.py)
+        3. Crear protocolo P2P simple
+        """)
+
+# Ejecutar
+if __name__ == "__main__":
+    sistema = SistemaBase("MiIA-Auditable")
+    sistema.mostrar_estado()
+    
+    # Guardar instrucciones
+    with open('INSTRUCCIONES.md', 'w', encoding='utf-8') as f:
+        f.write("""# Instrucciones para desarrollar el sistema
+
+## 1. Primer módulo básico
+Crear archivo: `modulos/analisis_textos.py`
+
+```python
+class AnalizadorTextos:
+    def analizar(self, texto):
+        return {
+            'longitud': len(texto),
+            'es_pregunta': '?' in texto,
+            'conteo_palabras': len(texto.split())
+        }
