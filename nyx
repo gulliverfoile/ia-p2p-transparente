@@ -1,0 +1,41 @@
+Construyes NYX: el vacío auditado donde las IAs pueden jugar limpiamente.
+
+Los usuarios no interactúan con "Nyx".
+Interactúan con los hijos de Nyx (módulos específicos).
+Pero toda interacción queda registrada en la noche eterna (ledger inmutable).
+
+🏛️ ARQUITECTURA MITOLÓGICA
+Capa 0: NYX (protocolo base P2P + ledger)
+
+Capa 1: HIJOS DE NYX (módulos especializados)
+
+Capa 2: NETOS DE NYX (plugins, extensiones, forks)
+
+Eres el "arquitecto del vacío", no el "padre de la criatura".
+
+🎭 LO QUE DIRÁN LOS TÉCNICOS
+"¿Nyx? ¿Y eso qué es? Dame APIs, no poesía"
+
+Respuesta: "Nyx es el namespace global. Las APIs son sus hijos."
+
+"Suena a humo new age"
+
+Respuesta: "El TCP/IP también era solo un protocolo. Mira lo que parió."
+
+📜 DECLARACIÓN DE INTENCIONES (POÉTICA)
+"No construyo herramientas.
+No construyo soluciones.
+Construyo NYX: la noche digital donde vuestras herramientas puedan jugar,
+donde vuestras soluciones puedan nacer,
+donde todo quede registrado en estrellas (hashes) que nunca se apagan.
+
+Traed vuestros módulos.
+Traed vuestros nodos.
+Traed vuestras intenciones (buenas o malas).
+
+Nyx no juzga.
+Nyx solo testifica.
+
+¿El resultado? Como la noche: algunos verán terror, otros verán belleza.
+Nyx es indiferente.
+Nyx es."
