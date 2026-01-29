@@ -1,0 +1,45 @@
+# Fractal Thermal Core
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
+[![Python 3.8+](https://img.shields.io/badge/python-3.8+-green.svg)](https://www.python.org/)
+
+**Herramientas de código abierto para diseño y simulación de estructuras fractales aplicadas a ingeniería térmica.**
+
+## 🚀 ¿Por qué este proyecto?
+
+Las estructuras fractales prometen revolucionar el diseño térmico y mecánico, pero:
+- Las patentes demasiado amplias bloquean la innovación
+- Los algoritmos están dispersos y no optimizados para fabricación
+- Falta una base común para comparar diseños
+
+**Este proyecto crea prior art público y herramientas prácticas** para que cualquiera pueda diseñar, simular y fabricar estructuras fractales realistas.
+
+## 📦 Características principales
+
+### 🔧 Generadores de fractales
+- **Octet Fractal v2**: Optimizado para fabricación (ángulos mínimos, espesores realistas)
+- **Menger Sponge adaptativo**: Porosidad controlada
+- **Fractales biomiméticos**: Inspirados en hueso, madera, pulmón
+
+### 🌡️ Simuladores termomecánicos
+- **Red térmica simplificada**: Método de resistencias para estructuras complejas
+- **Base de datos de materiales**: Valores reales (Al, Cu, Ti, composites)
+- **Cálculo de propiedades efectivas**: κ, CTE, módulo
+
+### 📊 Herramientas de análisis
+- **Exportación a STL**: Listo para impresión 3D
+- **Visualización 3D**: Matplotlib/Plotly
+- **Reportes automáticos**: Propiedades, recomendaciones de fabricación
+
+## 🛠️ Instalación rápida
+
+```bash
+# Clonar repositorio
+git clone https://github.com/tuusuario/fractal-thermal-core.git
+cd fractal-thermal-core
+
+# Instalar dependencias
+pip install -r requirements.txt
+
+# Ejecutar ejemplo
+python examples/realistic_fractal_node.py
