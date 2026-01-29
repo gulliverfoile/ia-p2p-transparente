@@ -1,0 +1,181 @@
+# src/simulators/thermal_network_simple.py
+"""
+Simulador térmico de red para estructuras fractales.
+Basado en método de resistencias térmicas.
+"""
+
+import numpy as np
+import networkx as nx
+from dataclasses import dataclass
+
+@dataclass
+class MaterialProperties:
+    """Propiedades de materiales reales (valores reales)"""
+    conductivity: float  # W/m·K
+    density: float      # kg/m³
+    specific_heat: float # J/kg·K
+    name: str
+    
+# Base de datos de materiales reales
+MATERIALS = {
+    'aluminum_6061': MaterialProperties(167, 2700, 897, 'Aluminum 6061'),
+    'copper_ofhc': MaterialProperties(391, 8960, 385, 'Copper OFHC'),
+    'invar_36': MaterialProperties(10.5, 8100, 515, 'Invar 36'),
+    'peek': MaterialProperties(0.25, 1320, 1350, 'PEEK polymer'),
+    'sic': MaterialProperties(120, 3210, 750, 'Silicon Carbide'),
+}
+
+class FractalThermalNetwork:
+    """Modelo térmico de red para fractales"""
+    
+    def __init__(self, nodes, beams, material='aluminum_6061', env_temp=293):
+        self.nodes = np.array(nodes)
+        self.beams = beams
+        self.material = MATERIALS[material]
+        self.env_temp = env_temp
+        
+        # Crear grafo de red térmica
+        self.graph = nx.Graph()
+        self._build_network()
+    
+    def _build_network(self):
+        """Construye la red de resistencias térmicas"""
+        # Agregar nodos
+        for i, pos in enumerate(self.nodes):
+            self.graph.add_node(i, pos=pos, temp=self.env_temp)
+        
+        # Agregar aristas (vigas) como resistencias térmicas
+        for beam in self.beams:
+            # Encontrar índices de nodos más cercanos
+            start_idx = self._find_nearest_node(beam['start'])
+            end_idx = self._find_nearest_node(beam['end'])
+            
+            # Calcular resistencia térmica
+            length = np.linalg.norm(beam['end'] - beam['start'])
+            radius = beam.get('mean_radius', 0.1)  # mm
+            
+            # Convertir a metros
+            length_m = length * 1e-3
+            radius_m = radius * 1e-3
+            
+            # Resistencia para conducción radial (simplificada)
+            cross_area = np.pi * radius_m**2
+            thermal_resistance = length_m / (self.material.conductivity * cross_area)
+            
+            # Agregar al grafo
+            self.graph.add_edge(start_idx, end_idx,
+                              resistance=thermal_resistance,
+                              length=length,
+                              radius=radius)
+    
+    def _find_nearest_node(self, point, tolerance=0.01):
+        """Encuentra el nodo más cercano a un punto"""
+        distances = np.linalg.norm(self.nodes - point, axis=1)
+        idx = np.argmin(distances)
+        return idx
+    
+    def solve_steady_state(self, hot_nodes, cold_nodes):
+        """
+        Resuelve estado estacionario.
+        hot_nodes: dict {índice: temperatura} o lista de índices a 100°C
+        cold_nodes: dict o lista a 0°C
+        """
+        # Convertir a diccionarios si son listas
+        if isinstance(hot_nodes, list):
+            hot_nodes = {idx: 373 for idx in hot_nodes}  # 100°C
+        if isinstance(cold_nodes, list):
+            cold_nodes = {idx: 273 for idx in cold_nodes}  # 0°C
+        
+        # Preparar sistema de ecuaciones
+        n_nodes = len(self.nodes)
+        A = np.zeros((n_nodes, n_nodes))
+        b = np.zeros(n_nodes)
+        
+        # Ecuaciones para nodos con temperatura fija
+        fixed_nodes = {}
+        fixed_nodes.update(hot_nodes)
+        fixed_nodes.update(cold_nodes)
+        
+        for node_idx, temp in fixed_nodes.items():
+            A[node_idx, node_idx] = 1
+            b[node_idx] = temp
+        
+        # Ecuaciones para nodos libres: conservación de energía
+        free_nodes = [i for i in range(n_nodes) if i not in fixed_nodes]
+        
+        for i in free_nodes:
+            neighbors = list(self.graph.neighbors(i))
+            total_conductance = 0
+            
+            for j in neighbors:
+                R = self.graph[i][j]['resistance']
+                conductance = 1/R
+                A[i, j] = -conductance
+                total_conductance += conductance
+            
+            A[i, i] = total_conductance
+            b[i] = 0  # Sin fuente de calor interna
+        
+        # Resolver sistema
+        try:
+            temperatures = np.linalg.solve(A, b)
+            
+            # Calcular flujo de calor total
+            total_heat_flow = 0
+            for hot_idx in hot_nodes:
+                for neighbor in self.graph.neighbors(hot_idx):
+                    if neighbor not in hot_nodes:
+                        delta_T = temperatures[hot_idx] - temperatures[neighbor]
+                        R = self.graph[hot_idx][neighbor]['resistance']
+                        total_heat_flow += delta_T / R
+            
+            # Actualizar temperaturas en el grafo
+            for i, temp in enumerate(temperatures):
+                self.graph.nodes[i]['temp'] = temp
+            
+            return {
+                'temperatures': temperatures,
+                'total_heat_flow': total_heat_flow,
+                'effective_conductivity': self._calc_effective_k(total_heat_flow)
+            }
+            
+        except np.linalg.LinAlgError:
+            print("Error: Sistema singular. Verificar conexiones.")
+            return None
+    
+    def _calc_effective_conductivity(self, total_heat_flow):
+        """Calcula conductividad térmica efectiva"""
+        # Dimensiones aproximadas
+        x_coords = self.nodes[:, 0]
+        y_coords = self.nodes[:, 1]
+        z_coords = self.nodes[:, 2]
+        
+        Lx = (x_coords.max() - x_coords.min()) * 1e-3  # a metros
+        Ly = (y_coords.max() - y_coords.min()) * 1e-3
+        Lz = (z_coords.max() - z_coords.min()) * 1e-3
+        
+        # Asumir gradiente en X
+        delta_T = 100  # K (diferencia impuesta)
+        cross_area = Ly * Lz  # m²
+        
+        if cross_area > 0:
+            k_eff = (total_heat_flow * Lx) / (cross_area * delta_T)
+            return k_eff
+        return 0
+    
+    def export_results(self, filename="thermal_results.csv"):
+        """Exporta resultados a CSV"""
+        import csv
+        
+        with open(filename, 'w', newline='') as f:
+            writer = csv.writer(f)
+            writer.writerow(['Node', 'X', 'Y', 'Z', 'Temperature'])
+            
+            for i in range(len(self.nodes)):
+                writer.writerow([
+                    i,
+                    self.nodes[i, 0],
+                    self.nodes[i, 1],
+                    self.nodes[i, 2],
+                    self.graph.nodes[i]['temp']
+                ])
