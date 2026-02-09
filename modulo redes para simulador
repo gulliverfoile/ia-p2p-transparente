@@ -1,0 +1,1441 @@
+#!/usr/bin/env python3
+"""
+NETWORK QUEST - Módulo educativo de protocolos de red
+Versión 1.0: HTTP, TCP, Onion Routing básicos
+"""
+
+import random
+import time
+import json
+import hashlib
+import base64
+from dataclasses import dataclass, field
+from enum import Enum
+from typing import List, Dict, Any, Optional, Tuple, Set
+from collections import deque, defaultdict
+import threading
+import socket as pysocket
+import struct
+
+# ============================================================================
+# 1. ENUMS Y ESTRUCTURAS BÁSICAS
+# ============================================================================
+
+class ProtocolType(Enum):
+    """Tipos de protocolos disponibles"""
+    HTTP = "HTTP"
+    TCP = "TCP"
+    UDP = "UDP"
+    ONION = "Onion Routing"
+    QUIC = "QUIC (experimental)"
+    BITCOIN = "Bitcoin P2P (simplificado)"
+
+class PacketType(Enum):
+    """Tipos de paquetes"""
+    DATA = "DATA"
+    ACK = "ACK"
+    SYN = "SYN"
+    SYN_ACK = "SYN-ACK"
+    FIN = "FIN"
+    RST = "RST"
+    GET = "GET"
+    POST = "POST"
+    RESPONSE = "RESPONSE"
+    ONION_LAYER = "ONION_LAYER"
+    ROUTING = "ROUTING"
+
+class SecurityLevel(Enum):
+    """Niveles de seguridad"""
+    NONE = "Sin cifrado"
+    BASIC = "Cifrado básico"
+    STRONG = "Cifrado fuerte"
+    ONION = "Cifrado multicapa (onion)"
+
+class NetworkEventType(Enum):
+    """Eventos de red"""
+    PACKET_SENT = "PACKET_SENT"
+    PACKET_RECEIVED = "PACKET_RECEIVED"
+    CONNECTION_ESTABLISHED = "CONNECTION_ESTABLISHED"
+    CONNECTION_CLOSED = "CONNECTION_CLOSED"
+    TIMEOUT = "TIMEOUT"
+    ERROR = "ERROR"
+    ROUTING_CHANGE = "ROUTING_CHANGE"
+    SECURITY_BREACH = "SECURITY_BREACH"
+    LATENCY_CHANGE = "LATENCY_CHANGE"
+
+@dataclass
+class NetworkEvent:
+    """Evento en la red"""
+    timestamp: float
+    event_type: NetworkEventType
+    source: str
+    destination: str
+    protocol: ProtocolType
+    details: Dict[str, Any] = field(default_factory=dict)
+    
+    def __repr__(self):
+        return f"[{self.timestamp:.3f}] {self.event_type.value}: {self.source} -> {self.destination}"
+
+@dataclass
+class Packet:
+    """Paquete de red"""
+    packet_id: int
+    source: str
+    destination: str
+    packet_type: PacketType
+    payload: Any
+    protocol: ProtocolType
+    sequence_num: int = 0
+    ack_num: int = 0
+    ttl: int = 64  # Time To Live
+    checksum: Optional[str] = None
+    encrypted: bool = False
+    layers: List[Dict] = field(default_factory=list)  # Para onion routing
+    
+    def calculate_checksum(self) -> str:
+        """Calcula checksum simple del paquete"""
+        data = f"{self.source}{self.destination}{self.packet_type}{self.payload}"
+        return hashlib.md5(data.encode()).hexdigest()[:8]
+    
+    def to_dict(self) -> Dict[str, Any]:
+        """Serializa el paquete"""
+        return {
+            "id": self.packet_id,
+            "source": self.source,
+            "destination": self.destination,
+            "type": self.packet_type.value,
+            "protocol": self.protocol.value,
+            "ttl": self.ttl,
+            "encrypted": self.encrypted,
+            "layers": len(self.layers) if self.layers else 0
+        }
+
+@dataclass
+class Node:
+    """Nodo en la red"""
+    node_id: str
+    node_type: str  # "client", "server", "router", "relay"
+    ip_address: str
+    bandwidth: int  # Mbps
+    latency: float  # ms
+    reliability: float  # 0.0 a 1.0
+    is_malicious: bool = False
+    is_compromised: bool = False
+    connections: List[str] = field(default_factory=list)
+    packets_sent: int = 0
+    packets_received: int = 0
+    packets_dropped: int = 0
+    
+    def __repr__(self):
+        status = "⚠️" if self.is_malicious else "✅"
+        return f"{status} Node({self.node_id}:{self.node_type}, BW:{self.bandwidth}Mbps, Lat:{self.latency}ms)"
+
+# ============================================================================
+# 2. PROTOCOLO BASE Y FÁBRICA
+# ============================================================================
+
+class Protocol:
+    """Clase base para todos los protocolos"""
+    
+    def __init__(self, protocol_type: ProtocolType, security_level: SecurityLevel):
+        self.protocol_type = protocol_type
+        self.security_level = security_level
+        self.packet_counter = 0
+        self.events = []
+        self.metrics = {
+            "packets_sent": 0,
+            "packets_received": 0,
+            "bytes_transferred": 0,
+            "errors": 0,
+            "retransmissions": 0,
+            "latency_avg": 0.0,
+            "throughput": 0.0
+        }
+    
+    def create_packet(self, source: str, destination: str, 
+                     packet_type: PacketType, payload: Any) -> Packet:
+        """Crea un nuevo paquete"""
+        self.packet_counter += 1
+        packet = Packet(
+            packet_id=self.packet_counter,
+            source=source,
+            destination=destination,
+            packet_type=packet_type,
+            payload=payload,
+            protocol=self.protocol_type,
+            ttl=64
+        )
+        
+        if self.security_level != SecurityLevel.NONE:
+            packet.encrypted = True
+        
+        packet.checksum = packet.calculate_checksum()
+        return packet
+    
+    def send(self, packet: Packet, network: 'Network') -> bool:
+        """Envía un paquete (método base)"""
+        self.metrics["packets_sent"] += 1
+        self.metrics["bytes_transferred"] += len(str(packet.payload))
+        
+        self._log_event(
+            NetworkEventType.PACKET_SENT,
+            packet.source,
+            packet.destination,
+            {"packet": packet.to_dict()}
+        )
+        
+        return True
+    
+    def receive(self, packet: Packet, network: 'Network') -> bool:
+        """Recibe un paquete (método base)"""
+        self.metrics["packets_received"] += 1
+        
+        self._log_event(
+            NetworkEventType.PACKET_RECEIVED,
+            packet.source,
+            packet.destination,
+            {"packet": packet.to_dict()}
+        )
+        
+        return True
+    
+    def _log_event(self, event_type: NetworkEventType, source: str, 
+                   destination: str, details: Dict[str, Any]):
+        """Registra un evento"""
+        event = NetworkEvent(
+            timestamp=time.time(),
+            event_type=event_type,
+            source=source,
+            destination=destination,
+            protocol=self.protocol_type,
+            details=details
+        )
+        self.events.append(event)
+    
+    def get_metrics(self) -> Dict[str, Any]:
+        """Obtiene métricas del protocolo"""
+        return self.metrics.copy()
+    
+    def get_protocol_info(self) -> Dict[str, Any]:
+        """Información educativa del protocolo"""
+        return {
+            "name": self.protocol_type.value,
+            "security": self.security_level.value,
+            "description": "",
+            "advantages": [],
+            "disadvantages": [],
+            "use_cases": []
+        }
+
+class ProtocolFactory:
+    """Fábrica de protocolos"""
+    
+    @staticmethod
+    def create_protocol(protocol_type: ProtocolType, 
+                       security_level: SecurityLevel = SecurityLevel.NONE) -> Protocol:
+        """Crea una instancia del protocolo especificado"""
+        if protocol_type == ProtocolType.HTTP:
+            return HTTPProtocol(security_level)
+        elif protocol_type == ProtocolType.TCP:
+            return TCPProtocol(security_level)
+        elif protocol_type == ProtocolType.ONION:
+            return OnionProtocol(security_level)
+        elif protocol_type == ProtocolType.QUIC:
+            return QUICProtocol(security_level)
+        elif protocol_type == ProtocolType.BITCOIN:
+            return BitcoinProtocol(security_level)
+        elif protocol_type == ProtocolType.UDP:
+            return UDPProtocol(security_level)
+        else:
+            raise ValueError(f"Protocolo no soportado: {protocol_type}")
+
+# ============================================================================
+# 3. IMPLEMENTACIONES DE PROTOCOLOS
+# ============================================================================
+
+class HTTPProtocol(Protocol):
+    """Protocolo HTTP simplificado"""
+    
+    def __init__(self, security_level: SecurityLevel):
+        super().__init__(ProtocolType.HTTP, security_level)
+        self.sessions = {}
+        self.http_methods = ["GET", "POST", "PUT", "DELETE", "HEAD"]
+    
+    def send(self, packet: Packet, network: 'Network') -> bool:
+        """Envía una petición HTTP"""
+        if packet.packet_type == PacketType.GET:
+            # Simular petición GET
+            packet.payload = f"GET {packet.payload} HTTP/1.1\r\nHost: {packet.destination}\r\n\r\n"
+        elif packet.packet_type == PacketType.POST:
+            # Simular petición POST
+            packet.payload = f"POST {packet.payload} HTTP/1.1\r\nHost: {packet.destination}\r\nContent-Length: {len(str(packet.payload))}\r\n\r\n{packet.payload}"
+        
+        return super().send(packet, network)
+    
+    def receive(self, packet: Packet, network: 'Network') -> bool:
+        """Procesa una respuesta HTTP"""
+        if "HTTP/1.1" in str(packet.payload):
+            status_code = random.choice([200, 404, 500, 301])
+            response = f"HTTP/1.1 {status_code} OK\r\nServer: NetworkQuest\r\n\r\nResponse to {packet.source}"
+            packet.payload = response
+        
+        return super().receive(packet, network)
+    
+    def get_protocol_info(self) -> Dict[str, Any]:
+        info = super().get_protocol_info()
+        info.update({
+            "description": "Protocolo de Transferencia de Hipertexto (HTTP). Protocolo de la capa de aplicación para sistemas de información distribuidos.",
+            "advantages": [
+                "Simple y fácil de implementar",
+                "Stateless (sin estado entre peticiones)",
+                "Ampliamente adoptado y soportado",
+                "Extensible mediante headers"
+            ],
+            "disadvantages": [
+                "Inseguro por defecto (necesita HTTPS)",
+                "Sin compresión por defecto",
+                "Lentitud en conexiones múltiples (HTTP/1.1)",
+                "Textual, no binario"
+            ],
+            "use_cases": [
+                "Páginas web",
+                "APIs REST",
+                "Transferencia de archivos pequeños",
+                "Microservicios"
+            ],
+            "version_history": ["HTTP/0.9 (1991)", "HTTP/1.0 (1996)", "HTTP/1.1 (1997)", "HTTP/2 (2015)", "HTTP/3 (2022)"]
+        })
+        return info
+
+class TCPProtocol(Protocol):
+    """Protocolo TCP simplificado (con 3-way handshake)"""
+    
+    def __init__(self, security_level: SecurityLevel):
+        super().__init__(ProtocolType.TCP, security_level)
+        self.connections = {}  # (source, dest) -> estado
+        self.window_size = 4  # Ventana deslizante simplificada
+        self.timeout = 2.0  # segundos
+    
+    def send(self, packet: Packet, network: 'Network') -> bool:
+        """Envía un paquete TCP"""
+        connection_key = (packet.source, packet.destination)
+        
+        # Establecer conexión si no existe
+        if connection_key not in self.connections:
+            if packet.packet_type != PacketType.SYN:
+                # Necesitamos SYN primero
+                syn_packet = self.create_packet(packet.source, packet.destination, 
+                                               PacketType.SYN, "SYN")
+                self.connections[connection_key] = "SYN_SENT"
+                return super().send(syn_packet, network)
+        
+        # Procesar según estado
+        state = self.connections.get(connection_key, "CLOSED")
+        
+        if state == "SYN_SENT" and packet.packet_type == PacketType.SYN_ACK:
+            self.connections[connection_key] = "ESTABLISHED"
+            ack_packet = self.create_packet(packet.source, packet.destination, 
+                                           PacketType.ACK, "ACK")
+            super().send(ack_packet, network)
+        
+        elif state == "ESTABLISHED":
+            # Envío de datos con ventana deslizante
+            packet.sequence_num = self.packet_counter
+            # Simular ACK después de un tiempo
+            if random.random() > 0.1:  # 90% de éxito
+                network.schedule_event(
+                    time.time() + 0.1,
+                    lambda: self._receive_ack(packet, network)
+                )
+            else:
+                self.metrics["retransmissions"] += 1
+        
+        return super().send(packet, network)
+    
+    def _receive_ack(self, packet: Packet, network: 'Network'):
+        """Simula recepción de ACK"""
+        ack_packet = self.create_packet(packet.destination, packet.source, 
+                                       PacketType.ACK, f"ACK for {packet.sequence_num}")
+        ack_packet.ack_num = packet.sequence_num + 1
+        self.receive(ack_packet, network)
+    
+    def get_protocol_info(self) -> Dict[str, Any]:
+        info = super().get_protocol_info()
+        info.update({
+            "description": "Protocolo de Control de Transmisión (TCP). Protocolo orientado a conexión de la capa de transporte que garantiza entrega confiable y ordenada.",
+            "advantages": [
+                "Garantiza entrega confiable de datos",
+                "Mantiene orden de paquetes",
+                "Control de congestión integrado",
+                "Control de flujo mediante ventana deslizante"
+            ],
+            "disadvantages": [
+                "Overhead mayor que UDP",
+                "Establecimiento de conexión lento (3-way handshake)",
+                "No ideal para transmisiones en tiempo real",
+                "Head-of-line blocking"
+            ],
+            "use_cases": [
+                "Transferencia de archivos (FTP)",
+                "Correo electrónico (SMTP)",
+                "Navegación web (HTTP/HTTPS)",
+                "Conexiones SSH"
+            ],
+            "features": [
+                "3-way handshake",
+                "Ventana deslizante",
+                "Control de congestión",
+                "Retransmisión con timeout"
+            ]
+        })
+        return info
+
+class UDPProtocol(Protocol):
+    """Protocolo UDP simplificado"""
+    
+    def __init__(self, security_level: SecurityLevel):
+        super().__init__(ProtocolType.UDP, security_level)
+    
+    def send(self, packet: Packet, network: 'Network') -> bool:
+        """Envía un paquete UDP (sin garantías)"""
+        # UDP no garantiza entrega, simular pérdida aleatoria
+        if random.random() < 0.1:  # 10% de pérdida
+            self.metrics["errors"] += 1
+            return False
+        
+        return super().send(packet, network)
+    
+    def get_protocol_info(self) -> Dict[str, Any]:
+        info = super().get_protocol_info()
+        info.update({
+            "description": "Protocolo de Datagramas de Usuario (UDP). Protocolo sin conexión de la capa de transporte que ofrece servicio mínimo.",
+            "advantages": [
+                "Muy baja latencia",
+                "Sin overhead de conexión",
+                "Ideal para datos sensibles al tiempo",
+                "Transmisión multicast eficiente"
+            ],
+            "disadvantages": [
+                "Sin garantía de entrega",
+                "Sin orden de paquetes",
+                "Sin control de congestión",
+                "Sin control de flujo"
+            ],
+            "use_cases": [
+                "Streaming de video/audio",
+                "Juegos en línea",
+                "DNS queries",
+                "Protocolos de broadcast"
+            ],
+            "contrast_with_tcp": "UDP es como enviar cartas sin acuse de recibo, TCP es como enviar paquetes con tracking y firma de entrega"
+        })
+        return info
+
+class OnionProtocol(Protocol):
+    """Protocolo Onion Routing (simplificado tipo Tor)"""
+    
+    def __init__(self, security_level: SecurityLevel):
+        super().__init__(ProtocolType.ONION, SecurityLevel.ONION)
+        self.relay_nodes = []
+        self.circuits = {}  # circuit_id -> [relay1, relay2, relay3]
+    
+    def create_onion_packet(self, source: str, destination: str, 
+                           payload: Any, num_layers: int = 3) -> Packet:
+        """Crea un paquete con cifrado por capas (como una cebolla)"""
+        packet = self.create_packet(source, destination, PacketType.ONION_LAYER, payload)
+        
+        # Crear capas de cifrado
+        layers = []
+        current_payload = payload
+        
+        for i in range(num_layers):
+            layer = {
+                "layer": i,
+                "next_hop": f"relay_{i}",
+                "encrypted_payload": self._encrypt_layer(current_payload, i),
+                "routing_info": f"Dest: {destination if i == 0 else f'relay_{i-1}'}"
+            }
+            layers.insert(0, layer)  # Insertar al principio (capa más externa primero)
+            current_payload = json.dumps(layer)
+        
+        packet.layers = layers
+        packet.payload = current_payload  # Payload final (la cebolla completa)
+        
+        return packet
+    
+    def _encrypt_layer(self, data: Any, layer_num: int) -> str:
+        """Simula cifrado de una capa"""
+        data_str = str(data)
+        # "Cifrado" simple (en realidad, solo codificación)
+        encoded = base64.b64encode(data_str.encode()).decode()
+        return f"ENCRYPTED_LAYER_{layer_num}:{encoded}"
+    
+    def _decrypt_layer(self, encrypted: str, layer_num: int) -> str:
+        """Simula descifrado de una capa"""
+        if encrypted.startswith(f"ENCRYPTED_LAYER_{layer_num}:"):
+            encoded = encrypted.split(":", 1)[1]
+            return base64.b64decode(encoded).decode()
+        return encrypted
+    
+    def process_onion_packet(self, packet: Packet, current_node: str) -> Optional[Packet]:
+        """Procesa un paquete onion (descifra una capa)"""
+        if not packet.layers:
+            return None
+        
+        # Descifrar la capa correspondiente
+        for i, layer in enumerate(packet.layers):
+            if layer["next_hop"] == current_node:
+                decrypted = self._decrypt_layer(layer["encrypted_payload"], i)
+                
+                # Crear nuevo paquete para el próximo salto
+                new_packet = Packet(
+                    packet_id=packet.packet_id,
+                    source=packet.source,
+                    destination=layer["routing_info"].split(": ")[1],
+                    packet_type=packet.packet_type,
+                    payload=decrypted,
+                    protocol=self.protocol_type,
+                    layers=packet.layers[i+1:] if i+1 < len(packet.layers) else []
+                )
+                
+                self._log_event(
+                    NetworkEventType.PACKET_RECEIVED,
+                    current_node,
+                    new_packet.destination,
+                    {"action": "onion_layer_peeled", "remaining_layers": len(new_packet.layers)}
+                )
+                
+                return new_packet
+        
+        return None
+    
+    def get_protocol_info(self) -> Dict[str, Any]:
+        info = super().get_protocol_info()
+        info.update({
+            "description": "Onion Routing (ejemplo: Tor). Técnica de anonimización que encapsula mensajes en capas de cifrado, como una cebolla.",
+            "advantages": [
+                "Alto anonimato y privacidad",
+                "Resistente a análisis de tráfico",
+                "Descentralizado",
+                "Cifrado punto-a-punto"
+            ],
+            "disadvantages": [
+                "Alta latencia (múltiples saltos)",
+                "Ancho de banda limitado",
+                "Complejidad de configuración",
+                "Posibles nodos maliciosos (exit nodes)"
+            ],
+            "use_cases": [
+                "Navegación anónima (Tor Browser)",
+                "Comunicaciones confidenciales",
+                "Evitar censura gubernamental",
+                "Periodismo de investigación"
+            ],
+            "how_it_works": [
+                "1. Cliente establece circuito con múltiples relays",
+                "2. Datos se cifran en capas (una por relay)",
+                "3. Cada relay descifra una capa y reenvía",
+                "4. Relay final envía datos al destino",
+                "5. Respuesta sigue ruta inversa"
+            ]
+        })
+        return info
+
+class QUICProtocol(Protocol):
+    """Protocolo QUIC (HTTP/3) simplificado"""
+    
+    def __init__(self, security_level: SecurityLevel):
+        super().__init__(ProtocolType.QUIC, SecurityLevel.STRONG)
+        self.streams = {}
+        self.multiplexing = True
+    
+    def send(self, packet: Packet, network: 'Network') -> bool:
+        """Envía un paquete QUIC"""
+        # QUIC incluye cifrado por defecto
+        packet.encrypted = True
+        
+        # Simular multiplexación de streams
+        if self.multiplexing:
+            stream_id = random.randint(1, 100)
+            packet.payload = f"STREAM:{stream_id}:{packet.payload}"
+        
+        # QUIC usa UDP pero con confiabilidad
+        if random.random() < 0.05:  # 5% de pérdida (menor que UDP puro)
+            # Retransmisión rápida
+            self.metrics["retransmissions"] += 1
+            network.schedule_event(
+                time.time() + 0.05,  # Retransmisión rápida
+                lambda: super().send(packet, network)
+            )
+            return False
+        
+        return super().send(packet, network)
+    
+    def get_protocol_info(self) -> Dict[str, Any]:
+        info = super().get_protocol_info()
+        info.update({
+            "description": "QUIC (Quick UDP Internet Connections). Protocolo de transporte sobre UDP desarrollado por Google, base de HTTP/3.",
+            "advantages": [
+                "Establecimiento de conexión rápido (0-RTT)",
+                "Multiplexación sin head-of-line blocking",
+                "Cifrado obligatorio",
+                "Mejor manejo de movilidad"
+            ],
+            "disadvantages": [
+                "Más complejo que TCP",
+                "Mayor overhead que TCP puro",
+                "Firewalls pueden bloquearlo",
+                "Menor adopción que TCP"
+            ],
+            "use_cases": [
+                "HTTP/3 (web moderna)",
+                "Aplicaciones móviles",
+                "Streaming de baja latencia",
+                "Videoconferencias"
+            ],
+            "innovations": [
+                "Transporte sobre UDP",
+                "Cifrado en capa de transporte",
+                "Streams independientes",
+                "Migración de conexión"
+            ]
+        })
+        return info
+
+class BitcoinProtocol(Protocol):
+    """Protocolo P2P de Bitcoin simplificado"""
+    
+    def __init__(self, security_level: SecurityLevel):
+        super().__init__(ProtocolType.BITCOIN, SecurityLevel.STRONG)
+        self.peers = set()
+        self.blockchain = []
+        self.mempool = []  # Transacciones no confirmadas
+        self.difficulty = 4  # Número de ceros iniciales en hash
+    
+    def send(self, packet: Packet, network: 'Network') -> bool:
+        """Envía un mensaje de la red Bitcoin"""
+        message_type = packet.packet_type
+        
+        if message_type == PacketType.DATA:
+            # Simular transacción
+            transaction = {
+                "txid": hashlib.sha256(str(packet.payload).encode()).hexdigest()[:16],
+                "from": packet.source,
+                "to": packet.destination,
+                "amount": random.randint(1, 100),
+                "fee": random.random()
+            }
+            packet.payload = f"TX:{json.dumps(transaction)}"
+            self.mempool.append(transaction)
+        
+        elif message_type == PacketType.ROUTING:
+            # Gossip de red P2P
+            packet.payload = f"PEER_LIST:{','.join(list(self.peers)[:5])}"
+        
+        # Bitcoin usa flood (inundación) - reenviar a múltiples peers
+        if packet.source != "broadcast":
+            for peer in list(self.peers)[:3]:  # Enviar a 3 peers aleatorios
+                if peer != packet.source:
+                    network.send_packet(packet.source, peer, packet.payload, self.protocol_type)
+        
+        return super().send(packet, network)
+    
+    def mine_block(self, miner: str) -> Dict[str, Any]:
+        """Simula minería de un bloque"""
+        nonce = 0
+        transactions = self.mempool[:10]  # Tomar primeras 10 transacciones
+        
+        while True:
+            block_data = {
+                "prev_hash": self.blockchain[-1]["hash"] if self.blockchain else "0"*64,
+                "transactions": transactions,
+                "nonce": nonce,
+                "miner": miner
+            }
+            
+            block_hash = hashlib.sha256(json.dumps(block_data).encode()).hexdigest()
+            
+            if block_hash.startswith("0" * self.difficulty):
+                block = {
+                    **block_data,
+                    "hash": block_hash,
+                    "timestamp": time.time()
+                }
+                self.blockchain.append(block)
+                self.mempool = self.mempool[10:]  # Remover transacciones minadas
+                return block
+            
+            nonce += 1
+            if nonce > 1000:  # Límite para demo
+                break
+        
+        return None
+    
+    def get_protocol_info(self) -> Dict[str, Any]:
+        info = super().get_protocol_info()
+        info.update({
+            "description": "Protocolo P2P de Bitcoin. Red descentralizada para transferencia de valor usando tecnología blockchain.",
+            "advantages": [
+                "Completamente descentralizado",
+                "Resistente a censura",
+                "Transacciones irreversibles",
+                "Sin necesidad de confianza"
+            ],
+            "disadvantages": [
+                "Alto consumo energético (PoW)",
+                "Baja escalabilidad (~7 TPS)",
+                "Alta volatilidad",
+                "Complejidad técnica"
+            ],
+            "use_cases": [
+                "Transferencia de valor global",
+                "Reserva de valor (oro digital)",
+                "Contratos inteligentes (en otras blockchains)",
+                "Identidad descentralizada"
+            ],
+            "key_concepts": [
+                "Proof-of-Work (Prueba de trabajo)",
+                "Blockchain (cadena de bloques)",
+                "Descentralización",
+                "Llaves públicas/privadas"
+            ]
+        })
+        return info
+
+# ============================================================================
+# 4. SIMULADOR DE RED COMPLETO
+# ============================================================================
+
+class NetworkSimulator:
+    """Simulador de red completo con múltiples protocolos"""
+    
+    def __init__(self):
+        self.nodes = {}
+        self.protocols = {}
+        self.routes = defaultdict(dict)
+        self.events = []
+        self.time = 0
+        self.packet_history = []
+        
+        # Métricas globales
+        self.metrics = {
+            "total_packets": 0,
+            "successful_deliveries": 0,
+            "failed_deliveries": 0,
+            "average_latency": 0.0,
+            "total_bandwidth_used": 0,
+            "security_breaches": 0
+        }
+        
+        # Inicializar con protocolos por defecto
+        self._initialize_default_protocols()
+    
+    def _initialize_default_protocols(self):
+        """Inicializa los protocolos disponibles"""
+        for protocol_type in ProtocolType:
+            protocol = ProtocolFactory.create_protocol(protocol_type)
+            self.protocols[protocol_type] = protocol
+    
+    def add_node(self, node_id: str, node_type: str, **kwargs):
+        """Añade un nodo a la red"""
+        node = Node(
+            node_id=node_id,
+            node_type=node_type,
+            ip_address=f"192.168.{random.randint(1,255)}.{random.randint(1,255)}",
+            bandwidth=kwargs.get('bandwidth', 100),
+            latency=kwargs.get('latency', 10.0),
+            reliability=kwargs.get('reliability', 0.95),
+            is_malicious=kwargs.get('is_malicious', False)
+        )
+        self.nodes[node_id] = node
+        return node
+    
+    def connect_nodes(self, node1_id: str, node2_id: str, 
+                     latency: float = None, bandwidth: int = None):
+        """Conecta dos nodos"""
+        if node1_id not in self.nodes or node2_id not in self.nodes:
+            raise ValueError("Nodo no encontrado")
+        
+        node1 = self.nodes[node1_id]
+        node2 = self.nodes[node2_id]
+        
+        if node2_id not in node1.connections:
+            node1.connections.append(node2_id)
+        if node1_id not in node2.connections:
+            node2.connections.append(node1_id)
+        
+        # Establecer métricas de conexión
+        connection_latency = latency or max(node1.latency, node2.latency) * 1.5
+        connection_bandwidth = bandwidth or min(node1.bandwidth, node2.bandwidth)
+        
+        self.routes[node1_id][node2_id] = {
+            "latency": connection_latency,
+            "bandwidth": connection_bandwidth,
+            "reliability": min(node1.reliability, node2.reliability)
+        }
+        self.routes[node2_id][node1_id] = self.routes[node1_id][node2_id]
+        
+        self._log_event(
+            NetworkEventType.CONNECTION_ESTABLISHED,
+            node1_id,
+            node2_id,
+            {"latency": connection_latency, "bandwidth": connection_bandwidth}
+        )
+    
+    def send_message(self, source: str, destination: str, 
+                    message: str, protocol_type: ProtocolType) -> bool:
+        """Envía un mensaje usando el protocolo especificado"""
+        if source not in self.nodes or destination not in self.nodes:
+            raise ValueError("Nodo no encontrado")
+        
+        protocol = self.protocols.get(protocol_type)
+        if not protocol:
+            raise ValueError(f"Protocolo no disponible: {protocol_type}")
+        
+        # Crear paquete
+        packet = protocol.create_packet(source, destination, PacketType.DATA, message)
+        
+        # Buscar ruta
+        route = self._find_route(source, destination)
+        if not route:
+            self.metrics["failed_deliveries"] += 1
+            self._log_event(
+                NetworkEventType.ERROR,
+                source,
+                destination,
+                {"error": "No route found"}
+            )
+            return False
+        
+        # Enviar a través de la ruta
+        success = self._send_through_route(packet, route, protocol)
+        
+        if success:
+            self.metrics["successful_deliveries"] += 1
+            # Calcular latencia
+            route_latency = sum(
+                self.routes[route[i]][route[i+1]]["latency"] 
+                for i in range(len(route)-1)
+            )
+            self.metrics["average_latency"] = (
+                self.metrics["average_latency"] * (self.metrics["successful_deliveries"] - 1) + 
+                route_latency
+            ) / self.metrics["successful_deliveries"]
+        
+        return success
+    
+    def _find_route(self, source: str, destination: str) -> List[str]:
+        """Encuentra una ruta entre nodos (BFS simple)"""
+        if source == destination:
+            return [source]
+        
+        visited = set()
+        queue = deque([[source]])
+        
+        while queue:
+            path = queue.popleft()
+            node = path[-1]
+            
+            if node == destination:
+                return path
+            
+            if node not in visited:
+                visited.add(node)
+                for neighbor in self.nodes[node].connections:
+                    if neighbor not in visited:
+                        new_path = list(path)
+                        new_path.append(neighbor)
+                        queue.append(new_path)
+        
+        return None
+    
+    def _send_through_route(self, packet: Packet, route: List[str], 
+                           protocol: Protocol) -> bool:
+        """Envía un paquete a través de una ruta"""
+        self.metrics["total_packets"] += 1
+        
+        # Simular envío hop-by-hop
+        for i in range(len(route) - 1):
+            current_node = route[i]
+            next_node = route[i + 1]
+            
+            # Verificar si el nodo es malicioso
+            if self.nodes[next_node].is_malicious and random.random() < 0.3:
+                self.metrics["security_breaches"] += 1
+                self._log_event(
+                    NetworkEventType.SECURITY_BREACH,
+                    current_node,
+                    next_node,
+                    {"action": "packet_intercepted"}
+                )
+                return False
+            
+            # Verificar fiabilidad del enlace
+            link_info = self.routes[current_node][next_node]
+            if random.random() > link_info["reliability"]:
+                self.metrics["failed_deliveries"] += 1
+                self._log_event(
+                    NetworkEventType.ERROR,
+                    current_node,
+                    next_node,
+                    {"error": "Link failure"}
+                )
+                return False
+            
+            # Enviar paquete
+            packet.source = current_node
+            packet.destination = next_node
+            protocol.send(packet, self)
+            
+            # Actualizar contadores de nodos
+            self.nodes[current_node].packets_sent += 1
+            self.nodes[next_node].packets_received += 1
+        
+        # Paquete llegó al destino
+        packet.destination = route[-1]
+        protocol.receive(packet, self)
+        
+        return True
+    
+    def _log_event(self, event_type: NetworkEventType, source: str, 
+                   destination: str, details: Dict[str, Any]):
+        """Registra un evento de red"""
+        event = NetworkEvent(
+            timestamp=time.time(),
+            event_type=event_type,
+            source=source,
+            destination=destination,
+            protocol=ProtocolType.HTTP,  # Por defecto
+            details=details
+        )
+        self.events.append(event)
+    
+    def compare_protocols(self, source: str, destination: str, 
+                         message: str) -> Dict[str, Any]:
+        """Compara todos los protocolos enviando el mismo mensaje"""
+        results = {}
+        
+        for protocol_type in self.protocols:
+            start_time = time.time()
+            success = self.send_message(source, destination, message, protocol_type)
+            end_time = time.time()
+            
+            protocol = self.protocols[protocol_type]
+            metrics = protocol.get_metrics()
+            
+            results[protocol_type.value] = {
+                "success": success,
+                "latency": end_time - start_time,
+                "packets_sent": metrics["packets_sent"],
+                "bytes_transferred": metrics["bytes_transferred"],
+                "errors": metrics["errors"],
+                "retransmissions": metrics.get("retransmissions", 0),
+                "security_level": protocol.security_level.value,
+                "info": protocol.get_protocol_info()
+            }
+        
+        return results
+    
+    def visualize_network(self) -> str:
+        """Visualización ASCII de la red"""
+        lines = []
+        
+        lines.append("🌐 NETWORK QUEST - Estado de la Red")
+        lines.append("=" * 70)
+        
+        # Nodos
+        lines.append("\n📡 NODOS:")
+        for node_id, node in self.nodes.items():
+            status = "🔴" if node.is_malicious else "🟢"
+            lines.append(f"  {status} {node_id:10} ({node.node_type:10}) "
+                       f"IP: {node.ip_address:15} "
+                       f"BW: {node.bandwidth:3d}Mbps "
+                       f"Conn: {len(node.connections):2d}")
+        
+        # Conexiones
+        lines.append("\n🔗 CONEXIONES:")
+        for node1_id in self.routes:
+            for node2_id in self.routes[node1_id]:
+                if node1_id < node2_id:  # Mostrar solo una vez
+                    info = self.routes[node1_id][node2_id]
+                    lines.append(f"  {node1_id:10} ↔ {node2_id:10} "
+                               f"Lat: {info['latency']:5.1f}ms "
+                               f"BW: {info['bandwidth']:3d}Mbps "
+                               f"Rel: {info['reliability']*100:3.0f}%")
+        
+        # Protocolos
+        lines.append("\n📊 PROTOCOLOS DISPONIBLES:")
+        for protocol_type, protocol in self.protocols.items():
+            metrics = protocol.get_metrics()
+            lines.append(f"  • {protocol_type.value:20} "
+                       f"Packets: {metrics['packets_sent']:4d} "
+                       f"Security: {protocol.security_level.value}")
+        
+        # Métricas
+        lines.append(f"\n📈 MÉTRICAS GLOBALES:")
+        lines.append(f"  • Paquetes totales: {self.metrics['total_packets']}")
+        lines.append(f"  • Entregas exitosas: {self.metrics['successful_deliveries']}")
+        lines.append(f"  • Latencia promedio: {self.metrics['average_latency']:.2f}ms")
+        lines.append(f"  • Brechas de seguridad: {self.metrics['security_breaches']}")
+        
+        lines.append("=" * 70)
+        return "\n".join(lines)
+
+# ============================================================================
+# 5. INTERFAZ INTERACTIVA DE RED
+# ============================================================================
+
+class NetworkQuestUI:
+    """Interfaz interactiva para Network Quest"""
+    
+    def __init__(self):
+        self.network = NetworkSimulator()
+        self._setup_demo_network()
+    
+    def _setup_demo_network(self):
+        """Configura una red de demostración"""
+        # Añadir nodos
+        nodes = [
+            ("cliente1", "client"),
+            ("cliente2", "client"),
+            ("servidor_web", "server"),
+            ("router1", "router"),
+            ("router2", "router"),
+            ("relay1", "relay"),
+            ("relay2", "relay"),
+            ("relay3", "relay"),
+            ("hacker", "malicious"),  # Nodo malicioso
+            ("minero", "miner")       # Nodo minero Bitcoin
+        ]
+        
+        for node_id, node_type in nodes:
+            is_malicious = (node_id == "hacker")
+            self.network.add_node(
+                node_id, 
+                node_type,
+                bandwidth=random.randint(50, 1000),
+                latency=random.uniform(1, 50),
+                reliability=random.uniform(0.8, 0.99),
+                is_malicious=is_malicious
+            )
+        
+        # Conectar nodos (topología de malla parcial)
+        connections = [
+            ("cliente1", "router1"),
+            ("cliente2", "router2"),
+            ("router1", "servidor_web"),
+            ("router2", "servidor_web"),
+            ("router1", "router2"),
+            ("relay1", "relay2"),
+            ("relay2", "relay3"),
+            ("relay3", "servidor_web"),
+            ("hacker", "router1"),
+            ("minero", "router2")
+        ]
+        
+        for node1, node2 in connections:
+            self.network.connect_nodes(node1, node2)
+    
+    def main_menu(self):
+        """Menú principal de Network Quest"""
+        while True:
+            print("""
+╔══════════════════════════════════════════════════════╗
+║               🌐 NETWORK QUEST 1.0                   ║
+║         Simulador educativo de protocolos            ║
+╚══════════════════════════════════════════════════════╝
+
+1. 🔍 Ver estado de la red
+2. 📨 Enviar mensaje (elegir protocolo)
+3. ⚖️  Comparar todos los protocolos
+4. 📊 Ver métricas detalladas
+5. 🎓 Aprender sobre protocolos
+6. 🎮 Modo demostración automática
+7. 🚪 Salir
+            """)
+            
+            choice = input("\nSelecciona una opción (1-7): ").strip()
+            
+            if choice == "1":
+                self.show_network_status()
+            elif choice == "2":
+                self.send_message_menu()
+            elif choice == "3":
+                self.compare_protocols_menu()
+            elif choice == "4":
+                self.show_detailed_metrics()
+            elif choice == "5":
+                self.learn_about_protocols()
+            elif choice == "6":
+                self.run_demo()
+            elif choice == "7":
+                print("\n👋 ¡Gracias por usar Network Quest!")
+                break
+            else:
+                print("❌ Opción inválida. Intenta de nuevo.")
+    
+    def show_network_status(self):
+        """Muestra el estado actual de la red"""
+        print("\n" + "="*70)
+        print(self.network.visualize_network())
+        input("\nPresiona ENTER para continuar...")
+    
+    def send_message_menu(self):
+        """Menú para enviar mensajes"""
+        print("\n📨 ENVIAR MENSAJE")
+        print("-" * 40)
+        
+        # Mostrar nodos disponibles
+        print("Nodos disponibles:")
+        for node_id, node in self.network.nodes.items():
+            print(f"  • {node_id} ({node.node_type})")
+        
+        source = input("\nNodo origen: ").strip()
+        destination = input("Nodo destino: ").strip()
+        message = input("Mensaje: ").strip()
+        
+        if not source or not destination:
+            print("❌ Se requiere origen y destino")
+            return
+        
+        # Seleccionar protocolo
+        print("\n🔧 Selecciona protocolo:")
+        protocols = list(ProtocolType)
+        for i, protocol in enumerate(protocols, 1):
+            print(f"{i}. {protocol.value}")
+        
+        try:
+            choice = int(input("\nOpción (1-{}): ".format(len(protocols))))
+            if 1 <= choice <= len(protocols):
+                protocol_type = protocols[choice-1]
+                
+                print(f"\n🚀 Enviando mensaje con {protocol_type.value}...")
+                success = self.network.send_message(source, destination, message, protocol_type)
+                
+                if success:
+                    print(f"✅ Mensaje enviado exitosamente con {protocol_type.value}")
+                else:
+                    print(f"❌ Error al enviar mensaje con {protocol_type.value}")
+                
+                # Mostrar información del protocolo
+                protocol = self.network.protocols[protocol_type]
+                info = protocol.get_protocol_info()
+                
+                print(f"\n📚 Información de {protocol_type.value}:")
+                print(f"   Descripción: {info['description'][:100]}...")
+                print(f"   Nivel de seguridad: {protocol.security_level.value}")
+                
+                input("\nPresiona ENTER para continuar...")
+            else:
+                print("❌ Opción inválida")
+        except ValueError:
+            print("❌ Entrada inválida")
+    
+    def compare_protocols_menu(self):
+        """Compara todos los protocolos"""
+        print("\n⚖️  COMPARACIÓN DE PROTOCOLOS")
+        print("-" * 40)
+        
+        source = input("Nodo origen [cliente1]: ").strip() or "cliente1"
+        destination = input("Nodo destino [servidor_web]: ").strip() or "servidor_web"
+        message = input("Mensaje [Hola Mundo!]: ").strip() or "Hola Mundo!"
+        
+        print(f"\n🔍 Comparando protocolos para mensaje: '{message}'")
+        print(f"   Ruta: {source} → {destination}")
+        print("-" * 60)
+        
+        results = self.network.compare_protocols(source, destination, message)
+        
+        print("\n📊 RESULTADOS DE COMPARACIÓN:")
+        print("=" * 100)
+        print(f"{'Protocolo':<20} {'Éxito':<8} {'Latencia':<10} {'Paquetes':<10} {'Bytes':<12} {'Errores':<8} {'Seguridad':<15}")
+        print("-" * 100)
+        
+        for protocol_name, data in results.items():
+            success_icon = "✅" if data["success"] else "❌"
+            print(f"{protocol_name:<20} {success_icon:<8} {data['latency']:<9.3f}s "
+                  f"{data['packets_sent']:<10} {data['bytes_transferred']:<12} "
+                  f"{data['errors']:<8} {data['security_level']:<15}")
+        
+        print("\n💡 RECOMENDACIONES BASADAS EN RESULTADOS:")
+        
+        # Analizar resultados y dar recomendaciones
+        successful_protocols = [p for p, d in results.items() if d["success"]]
+        
+        if successful_protocols:
+            # Encontrar el más rápido
+            fastest = min(successful_protocols, 
+                         key=lambda p: results[p]["latency"])
+            print(f"  • Más rápido: {fastest} ({results[fastest]['latency']:.3f}s)")
+            
+            # Encontrar el más confiable (menos errores)
+            most_reliable = min(successful_protocols,
+                              key=lambda p: results[p]["errors"])
+            if results[most_reliable]["errors"] == 0:
+                print(f"  • Más confiable: {most_reliable} (0 errores)")
+            
+            # Encontrar el más seguro
+            secure_protocols = [p for p in successful_protocols 
+                              if "STRONG" in results[p]["security_level"] or 
+                                 "ONION" in results[p]["security_level"]]
+            if secure_protocols:
+                print(f"  • Más seguro: {secure_protocols[0]}")
+        
+        input("\nPresiona ENTER para continuar...")
+    
+    def show_detailed_metrics(self):
+        """Muestra métricas detalladas de todos los protocolos"""
+        print("\n📊 MÉTRICAS DETALLADAS")
+        print("=" * 70)
+        
+        for protocol_type, protocol in self.network.protocols.items():
+            metrics = protocol.get_metrics()
+            info = protocol.get_protocol_info()
+            
+            print(f"\n📡 {protocol_type.value}:")
+            print(f"   • Paquetes enviados: {metrics['packets_sent']}")
+            print(f"   • Bytes transferidos: {metrics['bytes_transferred']}")
+            print(f"   • Errores: {metrics['errors']}")
+            print(f"   • Retransmisiones: {metrics.get('retransmissions', 0)}")
+            print(f"   • Nivel seguridad: {protocol.security_level.value}")
+            print(f"   • Descripción: {info['description'][:80]}...")
+        
+        print(f"\n🌐 MÉTRICAS GLOBALES DE RED:")
+        print(f"   • Total paquetes: {self.network.metrics['total_packets']}")
+        print(f"   • Entregas exitosas: {self.network.metrics['successful_deliveries']}")
+        print(f"   • Entregas fallidas: {self.network.metrics['failed_deliveries']}")
+        print(f"   • Tasa de éxito: {(self.network.metrics['successful_deliveries'] / max(1, self.network.metrics['total_packets']) * 100):.1f}%")
+        print(f"   • Brechas de seguridad: {self.network.metrics['security_breaches']}")
+        
+        input("\nPresiona ENTER para continuar...")
+    
+    def learn_about_protocols(self):
+        """Modo educativo - aprender sobre protocolos"""
+        print("\n🎓 APRENDER SOBRE PROTOCOLOS")
+        print("=" * 70)
+        
+        protocols = list(ProtocolType)
+        
+        while True:
+            print("\nSelecciona un protocolo para aprender:")
+            for i, protocol in enumerate(protocols, 1):
+                print(f"{i}. {protocol.value}")
+            print(f"{len(protocols)+1}. Volver al menú principal")
+            
+            try:
+                choice = int(input("\nOpción: "))
+                
+                if 1 <= choice <= len(protocols):
+                    protocol_type = protocols[choice-1]
+                    protocol = self.network.protocols[protocol_type]
+                    info = protocol.get_protocol_info()
+                    
+                    print(f"\n📚 {protocol_type.value} - INFORMACIÓN COMPLETA")
+                    print("=" * 70)
+                    print(f"\n📝 Descripción:")
+                    print(f"   {info['description']}")
+                    
+                    print(f"\n✅ Ventajas:")
+                    for advantage in info['advantages']:
+                        print(f"   • {advantage}")
+                    
+                    print(f"\n❌ Desventajas:")
+                    for disadvantage in info['disadvantages']:
+                        print(f"   • {disadvantage}")
+                    
+                    print(f"\n🎯 Casos de uso:")
+                    for use_case in info['use_cases']:
+                        print(f"   • {use_case}")
+                    
+                    if 'features' in info:
+                        print(f"\n⚙️  Características técnicas:")
+                        for feature in info['features']:
+                            print(f"   • {feature}")
+                    
+                    if 'how_it_works' in info:
+                        print(f"\n🔧 Cómo funciona:")
+                        for step in info['how_it_works']:
+                            print(f"   {step}")
+                    
+                    print(f"\n🛡️  Nivel de seguridad: {protocol.security_level.value}")
+                    
+                elif choice == len(protocols) + 1:
+                    break
+                else:
+                    print("❌ Opción inválida")
+                
+                input("\nPresiona ENTER para continuar...")
+                
+            except ValueError:
+                print("❌ Entrada inválida")
+    
+    def run_demo(self):
+        """Ejecuta una demostración automática"""
+        print("\n🎮 MODO DEMOSTRACIÓN AUTOMÁTICA")
+        print("=" * 70)
+        
+        scenarios = [
+            ("HTTP Básico", "cliente1", "servidor_web", "GET /index.html", ProtocolType.HTTP),
+            ("TCP con 3-way handshake", "cliente2", "servidor_web", "Datos confiables", ProtocolType.TCP),
+            ("UDP para streaming", "cliente1", "servidor_web", "Frame de video", ProtocolType.UDP),
+            ("Onion Routing anónimo", "cliente1", "servidor_web", "Mensaje secreto", ProtocolType.ONION),
+            ("QUIC rápido", "cliente2", "servidor_web", "HTTP/3 request", ProtocolType.QUIC),
+            ("Bitcoin P2P", "minero", "cliente1", "Transacción BTC", ProtocolType.BITCOIN)
+        ]
+        
+        print("🤖 Ejecutando 6 escenarios diferentes...\n")
+        
+        for i, (scenario_name, source, dest, message, protocol) in enumerate(scenarios, 1):
+            print(f"\n{'='*60}")
+            print(f"Escenario {i}: {scenario_name}")
+            print(f"{'='*60}")
+            
+            print(f"📤 Enviando: '{message}'")
+            print(f"📡 Protocolo: {protocol.value}")
+            print(f"🛣️  Ruta: {source} → {dest}")
+            
+            time.sleep(1)
+            
+            success = self.network.send_message(source, dest, message, protocol)
+            
+            if success:
+                print(f"✅ Éxito: Mensaje entregado usando {protocol.value}")
+            else:
+                print(f"❌ Fallo: Error en la entrega")
+            
+            # Mostrar eventos recientes
+            protocol_obj = self.network.protocols[protocol]
+            if protocol_obj.events:
+                print(f"\n📜 Eventos recientes:")
+                for event in protocol_obj.events[-3:]:  # Últimos 3 eventos
+                    print(f"   {event}")
+            
+            time.sleep(1.5)
+        
+        print(f"\n{'='*60}")
+        print("🏁 DEMOSTRACIÓN COMPLETADA")
+        print("=" * 60)
+        
+        # Resumen final
+        print("\n📊 RESUMEN FINAL:")
+        print(f"   • Total escenarios: {len(scenarios)}")
+        print(f"   • Paquetes totales enviados: {self.network.metrics['total_packets']}")
+        print(f"   • Brechas de seguridad detectadas: {self.network.metrics['security_breaches']}")
+        
+        input("\nPresiona ENTER para continuar...")
+
+# ============================================================================
+# 6. INTEGRACIÓN CON KERNEL (OPCIONAL)
+# ============================================================================
+
+class NetworkIntegratedKernel:
+    """Kernel con módulo de red integrado (ejemplo de integración)"""
+    
+    def __init__(self):
+        # Importar Kernel existente (asumiendo que está en el mismo archivo)
+        from kernel_module import Kernel  # Esto es simbólico
+        
+        self.kernel = Kernel()  # Kernel de procesos
+        self.network = NetworkSimulator()  # Módulo de red
+        self.network_processes = {}  # Procesos que usan red
+        
+        # Crear algunos nodos de red asociados a procesos
+        self._setup_network_integration()
+    
+    def _setup_network_integration(self):
+        """Configura la integración entre kernel y red"""
+        # Crear nodos de red para procesos importantes
+        self.network.add_node("kernel", "server", bandwidth=1000, latency=1)
+        
+        # Escuchar eventos de red y crear procesos correspondientes
+        # (esto es solo un ejemplo de cómo podrían integrarse)
+    
+    def create_network_process(self, process_name: str, protocol: ProtocolType):
+        """Crea un proceso que usa la red"""
+        # Crear proceso en el kernel
+        process = self.kernel.create_process(
+            name=f"Net_{process_name}",
+            burst_time=random.randint(10, 30),
+            memory=random.randint(20, 100)
+        )
+        
+        if process:
+            # Crear nodo de red para este proceso
+            node_id = f"proc_{process.pid}"
+            self.network.add_node(
+                node_id,
+                "client",
+                bandwidth=random.randint(10, 100),
+                latency=random.uniform(5, 50)
+            )
+            
+            # Conectar al kernel
+            self.network.connect_nodes(node_id, "kernel")
+            
+            # Guardar referencia
+            self.network_processes[process.pid] = {
+                "process": process,
+                "node_id": node_id,
+                "protocol": protocol
+            }
+            
+            return process
+        
+        return None
+    
+    def simulate_network_activity(self):
+        """Simula actividad de red para todos los procesos"""
+        for pid, info in self.network_processes.items():
+            process = info["process"]
+            if process.state != ProcessState.TERMINATED:
+                # Enviar mensaje aleatorio
+                message = f"Mensaje de {process.name}"
+                success = self.network.send_message(
+                    info["node_id"],
+                    "kernel",
+                    message,
+                    info["protocol"]
+                )
+                
+                if success:
+                    print(f"📤 {process.name} envió mensaje via {info['protocol'].value}")
+                else:
+                    print(f"❌ {process.name} falló al enviar mensaje")
+
+# ============================================================================
+# 7. PUNTO DE ENTRADA
+# ============================================================================
+
+def main():
+    """Función principal de Network Quest"""
+    print("""
+╔══════════════════════════════════════════════════════════════╗
+║                   🌐 NETWORK QUEST 1.0                      ║
+║         Simulador Educativo de Protocolos de Red            ║
+║                                                              ║
+║  Protocolos disponibles:                                     ║
+║  • HTTP/HTTPS (web)                                         ║
+║  • TCP (conexiones confiables)                              ║
+║  • UDP (datagramas rápidos)                                 ║
+║  • Onion Routing (anonimato tipo Tor)                       ║
+║  • QUIC (HTTP/3 moderno)                                    ║
+║  • Bitcoin P2P (blockchain)                                 ║
+║                                                              ║
+║  ¡Aprende ventajas y desventajas de cada protocolo!         ║
+╚══════════════════════════════════════════════════════════════╝
+    """)
+    
+    try:
+        ui = NetworkQuestUI()
+        ui.main_menu()
+    except KeyboardInterrupt:
+        print("\n\n🛑 Programa interrumpido por el usuario")
+    except Exception as e:
+        print(f"\n❌ Error inesperado: {e}")
+        import traceback
+        traceback.print_exc()
+    finally:
+        print("\n👋 ¡Hasta la próxima aventura en las redes!")
+
+if __name__ == "__main__":
+    main()
