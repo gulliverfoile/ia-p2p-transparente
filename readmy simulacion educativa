@@ -1,0 +1,55 @@
+KERNEL QUEST 5.1 - Edición Definitiva
+Kernel Quest es un simulador de núcleo de sistema operativo escrito en Python 3. Implementa una arquitectura modular profesional para demostrar la gestión de recursos, la planificación de procesos y el manejo de memoria en tiempo real.
+
+🚀 Características Principales
+Planificador Multipolítica: Soporte para FCFS, SJF, Priority, Round Robin y MLFQ (Multi-Level Feedback Queue).
+
+Gestor de Memoria Dinámica: Implementación de estrategias First Fit, Best Fit y Worst Fit con visualización de fragmentación externa.
+
+Ciclo de Vida Realista: Los procesos transitan por estados reales: NEW, READY, RUNNING, BLOCKED y TERMINATED.
+
+Sistema de I/O Probabilístico: Simulación de bloqueos por entrada/salida basados en el comportamiento del proceso.
+
+Telemetría Completa: Registro detallado de eventos y métricas de rendimiento (Throughput, Waiting Time, etc.).
+
+🏗️ Arquitectura del Sistema
+El simulador se divide en cuatro módulos críticos que interactúan de forma desacoplada:
+
+Process Module: Define la estructura de datos del proceso (PCB) y su control de estado.
+
+Memory Manager: Gestiona el direccionamiento y la asignación de bloques.
+
+Scheduler: El cerebro que decide qué proceso toma el control de la CPU.
+
+Kernel: El orquestador que sincroniza los ciclos de reloj y el sistema de eventos.
+
+🛠️ Instalación y Uso
+No requiere dependencias externas. Solo necesitas Python 3.10 o superior.
+
+Bash
+# Dar permisos de ejecución
+chmod +x kernel_quest.py
+
+# Ejecutar la simulación
+./kernel_quest.py
+📊 Visualización de Memoria
+El sistema incluye un visualizador ASCII que permite ver la ocupación del espacio de direcciones en tiempo real:
+
+[████████░░░░░░░████░░░░]
+
+█ = Memoria asignada a un proceso.
+
+░ = Espacio libre (Fragmentación).
+
+📈 Métricas de Análisis
+Al finalizar la ejecución, el Kernel genera un informe con:
+
+Cambios de Contexto: Total de veces que la CPU rotó de proceso.
+
+Utilización de CPU: Porcentaje de tiempo que el procesador estuvo ocupado.
+
+Fragmentación de Memoria: Eficiencia del algoritmo de asignación seleccionado.
+
+Tiempos Promedio: Análisis de espera (Waiting) y retorno (Turnaround).
+
+Nota Técnica: Este software ha sido diseñado con fines educativos y de benchmarking algorítmico. A pesar de su extensión, mantiene una lógica determinista corregida para evitar condiciones de carrera simuladas y fugas de memoria lógica.
