@@ -1,0 +1,1478 @@
+#!/usr/bin/env python3
+"""
+KERNEL QUEST 5.1 - EDICIÓN DEFINITIVA CORREGIDA
+Arquitectura modular profesional - Todos los bugs críticos corregidos
+"""
+
+import random
+import heapq
+import time
+import json
+import os
+import sys
+from collections import deque, defaultdict
+from dataclasses import dataclass, field
+from enum import Enum, auto
+from typing import Optional, List, Dict, Any, Tuple, Set
+from datetime import datetime
+
+# ============================================================================
+# 0. SISTEMA DE EVENTOS MEJORADO
+# ============================================================================
+
+@dataclass
+class SystemEvent:
+    """Evento del sistema para registro y análisis"""
+    timestamp: int
+    event_type: str
+    description: str
+    process_id: Optional[int] = None
+    process_name: Optional[str] = None
+    details: Dict[str, Any] = field(default_factory=dict)
+    
+    def __repr__(self):
+        return f"[{self.timestamp:03d}] {self.event_type}: {self.description}"
+    
+    def to_dict(self) -> Dict[str, Any]:
+        """Serialización segura del evento"""
+        return {
+            "timestamp": self.timestamp,
+            "event_type": self.event_type,
+            "description": self.description,
+            "process_id": self.process_id,
+            "process_name": self.process_name,
+            "details": self.details
+        }
+
+# ============================================================================
+# 1. MÓDULO PROCESOS (CORREGIDO)
+# ============================================================================
+
+class ProcessState(Enum):
+    NEW = "NEW"
+    READY = "READY"
+    RUNNING = "RUNNING"
+    BLOCKED = "BLOCKED"
+    TERMINATED = "TERMINATED"
+
+@dataclass
+class Process:
+    """Proceso con gestión profesional de estados y recursos - CORREGIDO"""
+    pid: int
+    burst_time: int
+    memory: int
+    priority: int = 1
+    name: str = ""
+    dependencies: List[int] = field(default_factory=list)
+    arrival_time: int = 0
+    io_required: bool = False
+    io_duration: int = 0
+    
+    # Estado interno
+    state: ProcessState = ProcessState.NEW
+    remaining_time: int = 0
+    waiting_time: int = 0
+    response_time: Optional[int] = None
+    completion_time: Optional[int] = None
+    memory_block: Optional[int] = None
+    blocked_until: Optional[int] = None
+    blocked_reason: Optional[str] = None
+    cpu_used: int = 0
+    io_count: int = 0  # Contador de operaciones I/O realizadas
+    
+    def __post_init__(self):
+        self.remaining_time = self.burst_time
+        if not self.name:
+            self.name = f"P{self.pid}"
+    
+    def __lt__(self, other):
+        return self.priority > other.priority  # Mayor prioridad primero
+    
+    def __repr__(self):
+        return (f"Process({self.pid}:{self.name}, state={self.state.value}, "
+                f"rem={self.remaining_time}, mem={self.memory})")
+    
+    def to_dict(self) -> Dict[str, Any]:
+        """Serialización para guardar estado - CORREGIDO"""
+        return {
+            "pid": self.pid,
+            "name": self.name,
+            "state": self.state.value,
+            "remaining_time": self.remaining_time,
+            "memory": self.memory,
+            "priority": self.priority,
+            "waiting_time": self.waiting_time,  # CORREGIDO: era process.waiting_time
+            "cpu_used": self.cpu_used,
+            "io_count": self.io_count
+        }
+
+# ============================================================================
+# 2. MÓDULO MEMORIA (MEJORADO Y CORREGIDO)
+# ============================================================================
+
+class MemoryBlock:
+    """Bloque de memoria con metadatos mejorados"""
+    def __init__(self, start: int, size: int, free: bool = True, pid: Optional[int] = None):
+        self.start = start
+        self.size = size
+        self.free = free
+        self.pid = pid
+        self.allocation_time: Optional[float] = None
+        self.free_time: Optional[float] = None
+    
+    def __repr__(self):
+        status = "FREE" if self.free else f"USED(P{self.pid})"
+        return f"Block({self.start:#06x}-{self.start+self.size:#06x}, {status}, {self.size}B)"
+    
+    def allocation_duration(self) -> float:
+        """Calcula duración de asignación si está asignado"""
+        if self.free or not self.allocation_time:
+            return 0.0
+        return time.time() - self.allocation_time
+
+class MemoryManager:
+    """Gestor de memoria con estrategias y estadísticas - CORREGIDO"""
+    
+    def __init__(self, size: int, strategy: str = "first_fit"):
+        if size <= 0:
+            raise ValueError("Tamaño de memoria debe ser positivo")
+        
+        self.total_size = size
+        self.strategy = strategy  # first_fit, best_fit, worst_fit
+        self.blocks = [MemoryBlock(0, size, True)]
+        self.allocations: Dict[int, List[MemoryBlock]] = defaultdict(list)
+        self.fragmentation_history = []
+        self.utilization_history = []
+        self.waiting_processes: List[Tuple[int, int]] = []  # (pid, memory_size)
+        self.free_listeners = []  # Listeners para eventos de liberación
+    
+    def add_free_listener(self, listener):
+        """Añade un listener para eventos de liberación de memoria"""
+        self.free_listeners.append(listener)
+    
+    def _notify_free(self, pid: int, size: int):
+        """Notifica a los listeners que se liberó memoria"""
+        for listener in self.free_listeners:
+            listener(pid, size)
+    
+    def _find_first_fit(self, size: int) -> Optional[int]:
+        """Primer bloque libre que tenga suficiente espacio"""
+        for i, block in enumerate(self.blocks):
+            if block.free and block.size >= size:
+                return i
+        return None
+    
+    def _find_best_fit(self, size: int) -> Optional[int]:
+        """Bloque libre más ajustado al tamaño solicitado"""
+        best_idx = None
+        best_size = float('inf')
+        
+        for i, block in enumerate(self.blocks):
+            if block.free and block.size >= size and block.size < best_size:
+                best_size = block.size
+                best_idx = i
+        
+        return best_idx
+    
+    def _find_worst_fit(self, size: int) -> Optional[int]:
+        """Bloque libre más grande (para reducir fragmentación)"""
+        worst_idx = None
+        worst_size = -1
+        
+        for i, block in enumerate(self.blocks):
+            if block.free and block.size >= size and block.size > worst_size:
+                worst_size = block.size
+                worst_idx = i
+        
+        return worst_idx
+    
+    def can_allocate(self, size: int) -> Tuple[bool, Optional[int]]:
+        """Verifica si se puede asignar memoria y devuelve el índice del bloque"""
+        if size <= 0:
+            return False, None
+        
+        total_free = sum(b.size for b in self.blocks if b.free)
+        if total_free < size:
+            return False, None
+        
+        # Buscar según estrategia
+        if self.strategy == "best_fit":
+            idx = self._find_best_fit(size)
+        elif self.strategy == "worst_fit":
+            idx = self._find_worst_fit(size)
+        else:  # first_fit por defecto
+            idx = self._find_first_fit(size)
+        
+        return idx is not None, idx
+    
+    def allocate(self, size: int, pid: int) -> Optional[int]:
+        """Asigna memoria a un proceso"""
+        can_alloc, idx = self.can_allocate(size)
+        if not can_alloc or idx is None:
+            # Añadir a lista de espera
+            self.waiting_processes.append((pid, size))
+            return None
+        
+        block = self.blocks[idx]
+        
+        # Si el bloque es más grande, dividirlo
+        if block.size > size:
+            new_block = MemoryBlock(
+                start=block.start + size,
+                size=block.size - size,
+                free=True
+            )
+            block.size = size
+            self.blocks.insert(idx + 1, new_block)
+        
+        # Asignar bloque
+        block.free = False
+        block.pid = pid
+        block.allocation_time = time.time()
+        block.free_time = None
+        
+        # Registrar asignación
+        self.allocations[pid].append(block)
+        
+        # Actualizar estadísticas
+        self._update_stats()
+        
+        return block.start
+    
+    def free(self, pid: int) -> bool:
+        """Libera toda la memoria de un proceso - MEJORADO"""
+        if pid not in self.allocations:
+            return False
+        
+        total_freed = 0
+        
+        for block in self.allocations[pid]:
+            block.free = True
+            block.pid = None
+            block.free_time = time.time()
+            total_freed += block.size
+        
+        del self.allocations[pid]
+        
+        # Notificar liberación de memoria
+        self._notify_free(pid, total_freed)
+        
+        # Fusionar bloques libres adyacentes
+        self._merge_free_blocks()
+        
+        # Intentar asignar memoria a procesos en espera
+        self._process_waiting_queue()
+        
+        # Actualizar estadísticas
+        self._update_stats()
+        
+        return True
+    
+    def _process_waiting_queue(self):
+        """Procesa la cola de espera de memoria - NUEVO"""
+        if not self.waiting_processes:
+            return
+        
+        # Procesar en orden FIFO
+        processed = []
+        for i, (pid, size) in enumerate(self.waiting_processes):
+            can_alloc, idx = self.can_allocate(size)
+            if can_alloc and idx is not None:
+                addr = self.allocate(size, pid)
+                if addr is not None:
+                    processed.append(i)
+                    # Evento será manejado por el caller
+        
+        # Remover procesos procesados (de atrás hacia adelante)
+        for i in reversed(processed):
+            self.waiting_processes.pop(i)
+    
+    def _merge_free_blocks(self):
+        """Fusiona bloques libres adyacentes eficientemente"""
+        if len(self.blocks) <= 1:
+            return
+        
+        merged = []
+        current = self.blocks[0]
+        
+        for next_block in self.blocks[1:]:
+            if current.free and next_block.free:
+                # Fusionar
+                current.size += next_block.size
+            else:
+                merged.append(current)
+                current = next_block
+        
+        merged.append(current)
+        self.blocks = merged
+    
+    def _update_stats(self):
+        """Actualiza estadísticas de memoria"""
+        # Fragmentación externa
+        free_blocks = [b for b in self.blocks if b.free]
+        if free_blocks:
+            total_free = sum(b.size for b in free_blocks)
+            largest_free = max(b.size for b in free_blocks)
+            fragmentation = 1 - (largest_free / total_free) if total_free > 0 else 0
+        else:
+            fragmentation = 0
+        
+        self.fragmentation_history.append(fragmentation)
+        
+        # Utilización
+        used = sum(b.size for b in self.blocks if not b.free)
+        utilization = used / self.total_size
+        self.utilization_history.append(utilization)
+    
+    def get_fragmentation(self) -> float:
+        """Retorna fragmentación actual"""
+        return self.fragmentation_history[-1] if self.fragmentation_history else 0
+    
+    def get_utilization(self) -> float:
+        """Retorna utilización actual"""
+        return self.utilization_history[-1] if self.utilization_history else 0
+    
+    def visualize(self, width: int = 60) -> str:
+        """Representación visual ASCII de la memoria - CORREGIDO"""
+        if width <= 0 or self.total_size == 0:
+            return ""
+        
+        scale = self.total_size / width
+        result = []
+        block_widths = []
+        total_allocated = 0
+        
+        # Calcular anchos con redondeo inteligente
+        for block in self.blocks:
+            block_width = block.size / scale
+            # Usamos round para mejor precisión
+            rounded_width = max(1, int(round(block_width)))
+            block_widths.append((block, rounded_width))
+            total_allocated += rounded_width
+        
+        # Ajustar si hay desviación
+        if total_allocated != width and block_widths:
+            diff = width - total_allocated
+            if diff != 0:
+                # Ajustar el último bloque
+                last_block, last_width = block_widths[-1]
+                new_width = max(1, last_width + diff)
+                block_widths[-1] = (last_block, new_width)
+        
+        # Construir visualización
+        result.append("[")
+        for block, bw in block_widths:
+            char = "░" if block.free else "█"
+            result.append(char * bw)
+        result.append("]")
+        
+        return "".join(result)
+    
+    def get_stats(self) -> Dict[str, Any]:
+        """Obtiene estadísticas completas"""
+        used = sum(b.size for b in self.blocks if not b.free)
+        free_blocks = [b for b in self.blocks if b.free]
+        
+        return {
+            "total_size": self.total_size,
+            "used": used,
+            "free": self.total_size - used,
+            "blocks": len(self.blocks),
+            "free_blocks": len(free_blocks),
+            "fragmentation": self.get_fragmentation(),
+            "utilization": self.get_utilization(),
+            "allocations": len(self.allocations),
+            "waiting_processes": len(self.waiting_processes)
+        }
+
+# ============================================================================
+# 3. MÓDULO PLANIFICACIÓN (COMPLETAMENTE REESCRITO)
+# ============================================================================
+
+class SchedulerType(Enum):
+    FCFS = "FCFS"      # First Come First Served
+    SJF = "SJF"       # Shortest Job First
+    PRIORITY = "PRIORITY"
+    ROUND_ROBIN = "ROUND_ROBIN"
+    MLFQ = "MLFQ"     # Multi-Level Feedback Queue
+
+class Scheduler:
+    """Planificador completamente reescrito - ESTRUCTURA UNIFICADA"""
+    
+    def __init__(self, policy: SchedulerType = SchedulerType.FCFS, quantum: int = 3):
+        self.policy = policy
+        self.quantum = quantum
+        
+        # Colas unificadas: siempre almacenan tuplas normalizadas
+        self.ready_queue = []  # Lista de procesos listos
+        self.current_process: Optional[Process] = None
+        self.current_quantum_used = 0
+        
+        # Métricas
+        self.context_switches = 0
+        self.waiting_times = []
+        self.response_times = []
+        self.turnaround_times = []
+        
+        # Para manejar diferentes políticas de manera unificada
+        self._setup_queue()
+    
+    def _setup_queue(self):
+        """Configura la cola según la política actual"""
+        if self.policy in [SchedulerType.PRIORITY, SchedulerType.SJF, SchedulerType.MLFQ]:
+            # Usar heap para estas políticas
+            self.ready_queue = []
+        else:
+            # Usar deque para FCFS y Round Robin
+            self.ready_queue = deque()
+    
+    def _add_to_queue(self, process: Process):
+        """Añade proceso a la cola según la política - MÉTODO UNIFICADO"""
+        if self.policy == SchedulerType.PRIORITY:
+            # (prioridad_negativa, tiempo_llegada, contador, proceso)
+            heapq.heappush(self.ready_queue, (-process.priority, process.arrival_time, process.pid, process))
+        elif self.policy == SchedulerType.SJF:
+            # (tiempo_restante, tiempo_llegada, contador, proceso)
+            heapq.heappush(self.ready_queue, (process.remaining_time, process.arrival_time, process.pid, process))
+        elif self.policy == SchedulerType.MLFQ:
+            # (nivel, tiempo_llegada, contador, proceso)
+            level = max(0, 3 - process.priority)  # Prioridad alta = nivel bajo
+            heapq.heappush(self.ready_queue, (level, process.arrival_time, process.pid, process))
+        else:  # FCFS o Round Robin
+            self.ready_queue.append(process)
+    
+    def _get_from_queue(self) -> Optional[Process]:
+        """Obtiene proceso de la cola según política - MÉTODO UNIFICADO"""
+        if not self.ready_queue:
+            return None
+        
+        self.context_switches += 1
+        
+        if self.policy in [SchedulerType.PRIORITY, SchedulerType.SJF, SchedulerType.MLFQ]:
+            # Sacar del heap
+            if self.ready_queue:
+                _, _, _, process = heapq.heappop(self.ready_queue)
+                return process
+        else:  # FCFS o Round Robin (deque)
+            if isinstance(self.ready_queue, deque):
+                return self.ready_queue.popleft()
+            else:
+                # Fallback seguro
+                return self.ready_queue.pop(0) if self.ready_queue else None
+        
+        return None
+    
+    def _get_all_ready_processes(self) -> List[Process]:
+        """Obtiene todos los procesos en cola de listos - MÉTODO UNIFICADO"""
+        if self.policy in [SchedulerType.PRIORITY, SchedulerType.SJF, SchedulerType.MLFQ]:
+            return [item[3] for item in self.ready_queue]
+        else:
+            return list(self.ready_queue)
+    
+    def change_policy(self, new_policy: SchedulerType, quantum: Optional[int] = None):
+        """Cambia la política del scheduler - SEGURO"""
+        # Preservar procesos actuales
+        processes = self._get_all_ready_processes()
+        if self.current_process and self.current_process.state != ProcessState.TERMINATED:
+            processes.append(self.current_process)
+        
+        # Cambiar política
+        self.policy = new_policy
+        if quantum is not None:
+            self.quantum = quantum
+        
+        # Reconfigurar cola
+        self._setup_queue()
+        
+        # Reañadir procesos
+        for process in processes:
+            if process.state == ProcessState.READY or process.state == ProcessState.RUNNING:
+                process.state = ProcessState.READY
+                self._add_to_queue(process)
+        
+        # Resetear proceso actual si estaba ejecutándose
+        self.current_process = None
+        self.current_quantum_used = 0
+    
+    def add_process(self, process: Process):
+        """Añade proceso a la cola apropiada"""
+        process.state = ProcessState.READY
+        self._add_to_queue(process)
+    
+    def get_next_process(self) -> Optional[Process]:
+        """Obtiene el siguiente proceso a ejecutar"""
+        self.current_quantum_used = 0
+        return self._get_from_queue()
+    
+    def should_preempt(self) -> bool:
+        """Determina si el proceso actual debe ser preemptado"""
+        if not self.current_process:
+            return False
+        
+        # Solo preemptar si es Round Robin y el quantum se agotó
+        if (self.policy == SchedulerType.ROUND_ROBIN and 
+            self.current_quantum_used >= self.quantum and
+            self.current_process.remaining_time > 0):
+            return True
+        
+        return False
+    
+    def preempt_current(self) -> Optional[Process]:
+        """Preempta el proceso actual si es necesario"""
+        if not self.current_process:
+            return None
+        
+        process = self.current_process
+        process.state = ProcessState.READY
+        self.add_process(process)  # Vuelve a la cola apropiada
+        self.current_process = None
+        self.current_quantum_used = 0
+        return process
+    
+    def update_waiting_times(self):
+        """Actualiza tiempos de espera de procesos en cola de listos"""
+        for process in self._get_all_ready_processes():
+            if process.state == ProcessState.READY:
+                process.waiting_time += 1
+    
+    def get_all_ready(self) -> List[Process]:
+        """Obtiene todos los procesos en cola de listos"""
+        return self._get_all_ready_processes()
+    
+    def record_completion(self, process: Process, arrival_time: int, completion_time: int):
+        """Registra métricas cuando un proceso termina"""
+        turnaround = completion_time - arrival_time
+        self.turnaround_times.append(turnaround)
+        self.waiting_times.append(process.waiting_time)
+        
+        if process.response_time is not None:
+            response = process.response_time - arrival_time
+            self.response_times.append(response)
+    
+    def get_metrics(self) -> Dict[str, float]:
+        """Obtiene métricas del planificador"""
+        total_completed = len(self.turnaround_times)
+        total_time = sum(self.turnaround_times) if self.turnaround_times else 1
+        
+        return {
+            "context_switches": self.context_switches,
+            "avg_waiting_time": sum(self.waiting_times) / max(1, len(self.waiting_times)),
+            "avg_response_time": sum(self.response_times) / max(1, len(self.response_times)),
+            "avg_turnaround_time": sum(self.turnaround_times) / max(1, len(self.turnaround_times)),
+            "throughput": total_completed / max(1, total_time),
+            "ready_processes": len(self.get_all_ready())
+        }
+
+# ============================================================================
+# 4. KERNEL COMPLETO (CORREGIDO Y ROBUSTO)
+# ============================================================================
+
+class Kernel:
+    """Kernel principal que integra todos los módulos - COMPLETAMENTE CORREGIDO"""
+    
+    def __init__(self, memory_size: int = 1024, scheduler_policy: SchedulerType = SchedulerType.ROUND_ROBIN):
+        # Módulos principales
+        self.memory = MemoryManager(memory_size, "first_fit")
+        self.scheduler = Scheduler(scheduler_policy, quantum=3)
+        
+        # Configurar listeners de memoria
+        self.memory.add_free_listener(self._on_memory_freed)
+        
+        # Estado del sistema
+        self.time = 0
+        self.pid_counter = 1
+        self.running = False
+        
+        # Procesos
+        self.processes: Dict[int, Process] = {}
+        self.blocked_processes: Dict[int, Process] = {}
+        self.memory_blocked_processes: Set[int] = set()  # Procesos bloqueados por memoria
+        
+        # Sistema de eventos
+        self.events = deque(maxlen=100)
+        self.event_log = []
+        
+        # Métricas del sistema
+        self.metrics = {
+            "total_ticks": 0,
+            "cpu_busy_ticks": 0,
+            "processes_created": 0,
+            "processes_completed": 0,
+            "processes_blocked": 0,
+            "memory_errors": 0,
+            "deadlocks_detected": 0,
+            "total_events": 0,
+            "io_operations": 0
+        }
+        
+        # Historial para análisis
+        self.history = {
+            "processes": [],
+            "memory_usage": [],
+            "cpu_utilization": [],
+            "events_by_type": defaultdict(int)
+        }
+    
+    def _on_memory_freed(self, pid: int, size: int):
+        """Callback cuando se libera memoria - NUEVO"""
+        # Intentar desbloquear procesos esperando memoria
+        self._check_memory_blocked()
+    
+    def _check_memory_blocked(self):
+        """Verifica procesos bloqueados por memoria - NUEVO Y CORREGIDO"""
+        if not self.memory_blocked_processes:
+            return
+        
+        unblocked = []
+        for pid in list(self.memory_blocked_processes):
+            if pid in self.processes:
+                process = self.processes[pid]
+                # Verificar si ahora hay memoria disponible
+                if self.memory.can_allocate(process.memory)[0]:
+                    addr = self.memory.allocate(process.memory, pid)
+                    if addr is not None:
+                        process.memory_block = addr
+                        process.state = ProcessState.READY
+                        process.blocked_reason = None
+                        process.blocked_until = None
+                        self.scheduler.add_process(process)
+                        unblocked.append(pid)
+                        
+                        self._log_event(
+                            event_type="PROCESS_UNBLOCKED",
+                            description=f"Proceso desbloqueado (memoria disponible)",
+                            process=process,
+                            details={"reason": "memory_freed", "memory": process.memory}
+                        )
+        
+        for pid in unblocked:
+            self.memory_blocked_processes.discard(pid)
+            if pid in self.blocked_processes:
+                del self.blocked_processes[pid]
+    
+    def _log_event(self, event_type: str, description: str, 
+                   process: Optional[Process] = None, **details):
+        """Registra un evento en el sistema"""
+        event = SystemEvent(
+            timestamp=self.time,
+            event_type=event_type,
+            description=description,
+            process_id=process.pid if process else None,
+            process_name=process.name if process else None,
+            details=details
+        )
+        
+        self.events.append(event)
+        self.event_log.append(event)
+        
+        # Actualizar métricas
+        self.metrics["total_events"] += 1
+        self.history["events_by_type"][event_type] += 1
+        
+        # Solo imprimir eventos críticos
+        if event_type in ["ERROR", "WARNING", "DEADLOCK_DETECTED"]:
+            level = "⚠️" if event_type == "WARNING" else "❌"
+            print(f"{level} {event}")
+    
+    def get_recent_events(self, count: int = 10) -> List[SystemEvent]:
+        """Obtiene los eventos más recientes"""
+        return list(self.events)[-count:]
+    
+    def get_events_by_type(self, event_type: str) -> List[SystemEvent]:
+        """Filtra eventos por tipo"""
+        return [e for e in self.event_log if e.event_type == event_type]
+    
+    def create_process(self, name: str = "", burst_time: int = None, 
+                      memory: int = None, priority: int = None,
+                      io_required: bool = False) -> Optional[Process]:
+        """Crea un nuevo proceso con parámetros opcionales - CORREGIDO"""
+        # Valores por defecto
+        burst_time = burst_time or random.randint(5, 15)
+        memory = memory or random.randint(10, 50)
+        priority = priority or random.randint(1, 5)
+        
+        pid = self.pid_counter
+        self.pid_counter += 1
+        
+        process = Process(
+            pid=pid,
+            name=name or f"P{pid}",
+            burst_time=burst_time,
+            memory=memory,
+            priority=priority,
+            arrival_time=self.time,
+            io_required=io_required,
+            io_duration=random.randint(2, 4) if io_required else 0
+        )
+        
+        self._log_event(
+            event_type="PROCESS_CREATED",
+            description=f"Proceso creado: {process.name}",
+            process=process,
+            details={
+                "burst_time": burst_time,
+                "memory": memory,
+                "priority": priority,
+                "io_required": io_required
+            }
+        )
+        
+        # Intentar asignar memoria - NUEVA LÓGICA
+        if not self.memory.can_allocate(memory)[0]:
+            # Bloquear por memoria (sin timeout, espera por evento)
+            process.state = ProcessState.BLOCKED
+            process.blocked_reason = "memory_pressure"
+            self.blocked_processes[pid] = process
+            self.memory_blocked_processes.add(pid)  # Registrar como bloqueado por memoria
+            self.metrics["processes_blocked"] += 1
+            
+            self._log_event(
+                event_type="PROCESS_BLOCKED",
+                description=f"Proceso bloqueado por falta de memoria",
+                process=process,
+                details={"memory_needed": memory, "waiting_for": "memory_free"}
+            )
+            
+            print(f"⚠️ {process.name} bloqueado: esperando {memory}B de memoria")
+        else:
+            addr = self.memory.allocate(memory, pid)
+            if addr is None:
+                # Esto no debería pasar si can_allocate dijo True
+                process.state = ProcessState.TERMINATED
+                self.metrics["memory_errors"] += 1
+                self._log_event(
+                    event_type="ERROR",
+                    description=f"Error inesperado de memoria",
+                    process=process
+                )
+                return None
+            
+            process.memory_block = addr
+            self.scheduler.add_process(process)
+            self._log_event(
+                event_type="MEMORY_ALLOCATED",
+                description=f"Memoria asignada: {memory}B",
+                process=process,
+                details={"address": addr, "size": memory}
+            )
+        
+        self.processes[pid] = process
+        self.metrics["processes_created"] += 1
+        
+        # Registrar en historial
+        self.history["processes"].append({
+            "time": self.time,
+            "pid": pid,
+            "action": "created",
+            "state": process.state.value
+        })
+        
+        return process
+    
+    def check_unblock(self):
+        """Verifica si procesos bloqueados por I/O pueden desbloquearse"""
+        unblocked = []
+        
+        for pid, process in list(self.blocked_processes.items()):
+            if pid in self.memory_blocked_processes:
+                # Procesos bloqueados por memoria se manejan en _check_memory_blocked
+                continue
+                
+            if process.blocked_until and self.time >= process.blocked_until:
+                # I/O completado
+                process.state = ProcessState.READY
+                process.blocked_reason = None
+                process.blocked_until = None
+                self.scheduler.add_process(process)
+                unblocked.append(pid)
+                
+                self._log_event(
+                    event_type="PROCESS_UNBLOCKED",
+                    description=f"Proceso desbloqueado (I/O completado)",
+                    process=process,
+                    details={"reason": "io_completed"}
+                )
+        
+        for pid in unblocked:
+            del self.blocked_processes[pid]
+            print(f"🔓 {self.processes[pid].name} desbloqueado (I/O)")
+    
+    def simulate_io_block(self, process: Process) -> bool:
+        """Simula bloqueo por I/O de manera probabilística - MEJORADO"""
+        if not process.io_required:
+            return False
+        
+        # Probabilidad más realista
+        base_probability = 0.15
+        # La probabilidad aumenta con el uso de CPU pero tiene límite
+        cpu_factor = min(0.3, process.cpu_used * 0.015)
+        # La probabilidad disminuye con cada I/O ya realizado
+        io_factor = max(-0.1, -process.io_count * 0.05)
+        
+        block_probability = base_probability + cpu_factor + io_factor
+        block_probability = max(0.05, min(0.7, block_probability))  # Entre 5% y 70%
+        
+        if random.random() < block_probability:
+            process.io_count += 1
+            self.metrics["io_operations"] += 1
+            
+            self._log_event(
+                event_type="IO_REQUEST",
+                description=f"Solicitud I/O #{process.io_count}",
+                process=process,
+                details={
+                    "probability": block_probability,
+                    "duration": process.io_duration
+                }
+            )
+            
+            process.state = ProcessState.BLOCKED
+            process.blocked_reason = "io_wait"
+            process.blocked_until = self.time + process.io_duration
+            self.blocked_processes[process.pid] = process
+            self.metrics["processes_blocked"] += 1
+            return True
+        
+        return False
+    
+    def execute_cycle(self):
+        """Ejecuta un ciclo del kernel - ROBUSTO Y CORREGIDO"""
+        self.time += 1
+        self.metrics["total_ticks"] += 1
+        
+        # Registrar inicio de ciclo
+        self._log_event(
+            event_type="CYCLE_START",
+            description=f"Ciclo {self.time}",
+            details={
+                "ready_count": len(self.scheduler.get_all_ready()),
+                "blocked_count": len(self.blocked_processes)
+            }
+        )
+        
+        # Actualizar tiempos de espera
+        self.scheduler.update_waiting_times()
+        
+        # Verificar desbloqueos (solo I/O)
+        self.check_unblock()
+        
+        # Verificar bloqueados por memoria (manejado por eventos)
+        
+        # Determinar proceso a ejecutar
+        current_process = None
+        
+        # Si hay proceso en ejecución, verificar si debe continuar
+        if self.scheduler.current_process:
+            # Verificar si debe preemptar
+            if self.scheduler.should_preempt():
+                preempted = self.scheduler.preempt_current()
+                if preempted:
+                    self._log_event(
+                        event_type="PROCESS_PREEMPTED",
+                        description=f"Proceso preemptado",
+                        process=preempted,
+                        details={"quantum": self.scheduler.quantum}
+                    )
+                    print(f"⏸️ {preempted.name} preemptado (quantum)")
+            
+            # Si no fue preemptado, sigue siendo el actual
+            if self.scheduler.current_process:
+                current_process = self.scheduler.current_process
+                self.scheduler.current_quantum_used += 1
+        
+        # Si no hay proceso actual
+        if not current_process:
+            current_process = self.scheduler.get_next_process()
+            if current_process:
+                current_process.state = ProcessState.RUNNING
+                self.scheduler.current_process = current_process
+                self.scheduler.current_quantum_used = 1
+        
+        # Si no hay proceso para ejecutar, CPU idle
+        if not current_process:
+            self.history["cpu_utilization"].append(0)
+            self._log_event(
+                event_type="CPU_IDLE",
+                description="CPU idle"
+            )
+            return
+        
+        # Proceso en ejecución
+        self.metrics["cpu_busy_ticks"] += 1
+        self.history["cpu_utilization"].append(1)
+        
+        # Registrar tiempo de respuesta (primera vez)
+        if current_process.response_time is None:
+            current_process.response_time = self.time
+            self._log_event(
+                event_type="FIRST_RESPONSE",
+                description=f"Primera respuesta",
+                process=current_process
+            )
+        
+        # Ejecutar unidad de tiempo
+        current_process.remaining_time -= 1
+        current_process.cpu_used += 1
+        
+        # Verificar bloqueo por I/O
+        if self.simulate_io_block(current_process):
+            print(f"⏳ {current_process.name} bloqueado por I/O")
+            self.scheduler.current_process = None
+            self.scheduler.current_quantum_used = 0
+            return
+        
+        # Verificar si terminó
+        if current_process.remaining_time <= 0:
+            current_process.state = ProcessState.TERMINATED
+            current_process.completion_time = self.time
+            
+            # Liberar memoria
+            self.memory.free(current_process.pid)
+            
+            # Registrar métricas
+            self.scheduler.record_completion(
+                current_process, 
+                current_process.arrival_time,
+                current_process.completion_time
+            )
+            
+            self.metrics["processes_completed"] += 1
+            self.scheduler.current_process = None
+            self.scheduler.current_quantum_used = 0
+            
+            self._log_event(
+                event_type="PROCESS_TERMINATED",
+                description=f"Proceso completado",
+                process=current_process,
+                details={
+                    "waiting_time": current_process.waiting_time,
+                    "cpu_used": current_process.cpu_used,
+                    "turnaround": current_process.completion_time - current_process.arrival_time
+                }
+            )
+            
+            print(f"✅ {current_process.name} completado")
+        
+        # Actualizar historial
+        self.history["memory_usage"].append(self.memory.get_utilization())
+        
+        # Registrar fin de ciclo
+        self._log_event(
+            event_type="CYCLE_END",
+            description=f"Fin ciclo {self.time}"
+        )
+    
+    def get_system_metrics(self) -> Dict[str, Any]:
+        """Obtiene métricas completas del sistema"""
+        scheduler_metrics = self.scheduler.get_metrics()
+        memory_stats = self.memory.get_stats()
+        
+        cpu_util = (self.metrics["cpu_busy_ticks"] / 
+                   max(1, self.metrics["total_ticks"]))
+        
+        system_throughput = self.metrics["processes_completed"] / max(1, self.time)
+        
+        return {
+            "time": self.time,
+            "cpu_utilization": cpu_util,
+            "processes_active": len(self.processes) - self.metrics["processes_completed"],
+            "processes_completed": self.metrics["processes_completed"],
+            "processes_blocked": len(self.blocked_processes),
+            "memory_blocked": len(self.memory_blocked_processes),
+            "memory_fragmentation": memory_stats["fragmentation"],
+            "memory_utilization": memory_stats["utilization"],
+            "memory_waiting": memory_stats["waiting_processes"],
+            "total_events": self.metrics["total_events"],
+            "io_operations": self.metrics["io_operations"],
+            "event_types": dict(self.history["events_by_type"]),
+            **scheduler_metrics,
+            "system_throughput": system_throughput
+        }
+    
+    def visualize_system_compact(self) -> str:
+        """Visualización compacta del sistema"""
+        lines = []
+        
+        # Header
+        scheduler_name = self.scheduler.policy.value
+        quantum_info = f" | Q:{self.scheduler.quantum}" if self.scheduler.policy == SchedulerType.ROUND_ROBIN else ""
+        
+        lines.append(f"🖥️  KERNEL QUEST 5.1 | T:{self.time:03d} | {scheduler_name}{quantum_info}")
+        lines.append("=" * 70)
+        
+        # Procesos activos
+        lines.append("\n📊 PROCESOS ACTIVOS:")
+        for pid, proc in sorted(self.processes.items()):
+            if proc.state != ProcessState.TERMINATED:
+                status_icon = {
+                    ProcessState.RUNNING: "🏃",
+                    ProcessState.READY: "⏳", 
+                    ProcessState.BLOCKED: "🚫",
+                    ProcessState.NEW: "🆕"
+                }.get(proc.state, "❓")
+                
+                reason = f"({proc.blocked_reason})" if proc.blocked_reason else ""
+                lines.append(f"  {status_icon} {proc.name:5} | "
+                           f"PID:{proc.pid:3} | "
+                           f"Rem:{proc.remaining_time:3d} | "
+                           f"Mem:{proc.memory:4d}B | "
+                           f"Prio:{proc.priority:2d} {reason}")
+        
+        # Memoria
+        lines.append("\n💾 MEMORIA:")
+        mem_stats = self.memory.get_stats()
+        lines.append(f"  Uso: {mem_stats['utilization']*100:>5.1f}% | "
+                     f"Frag: {mem_stats['fragmentation']*100:>5.1f}% | "
+                     f"Libre: {mem_stats['free']}/{mem_stats['total_size']}B")
+        lines.append(f"  {self.memory.visualize(50)}")
+        
+        # Colas
+        ready_count = len(self.scheduler.get_all_ready())
+        blocked_count = len(self.blocked_processes)
+        lines.append(f"\n📋 COLAS: ⏳Listos:{ready_count} | 🚫Bloq:{blocked_count} | "
+                     f"✅Comp:{self.metrics['processes_completed']}")
+        
+        # Proceso actual
+        if self.scheduler.current_process:
+            proc = self.scheduler.current_process
+            lines.append(f"\n🎯 EJECUTANDO: {proc.name} | "
+                       f"T:{proc.remaining_time}s | "
+                       f"CPU:{proc.cpu_used}s | "
+                       f"Q:{self.scheduler.current_quantum_used}/{self.scheduler.quantum}")
+        
+        # Métricas clave
+        metrics = self.get_system_metrics()
+        lines.append(f"\n📈 MÉTRICAS: CPU:{metrics['cpu_utilization']*100:4.1f}% | "
+                     f"Wait:{metrics['avg_waiting_time']:5.2f} | "
+                     f"Ctx:{metrics['context_switches']:3d}")
+        
+        lines.append("-" * 70)
+        return "\n".join(lines)
+    
+    def visualize_system_detailed(self) -> str:
+        """Visualización detallada del sistema"""
+        lines = []
+        
+        # Header
+        scheduler_name = self.scheduler.policy.value
+        lines.append(f"🖥️  KERNEL SIMULATOR | Time: {self.time:03d} | Scheduler: {scheduler_name}")
+        lines.append("=" * 70)
+        
+        # Procesos
+        lines.append("\n📊 PROCESOS:")
+        for pid, proc in sorted(self.processes.items()):
+            if proc.state != ProcessState.TERMINATED:
+                status_icon = {
+                    ProcessState.RUNNING: "▶️",
+                    ProcessState.READY: "⏸️",
+                    ProcessState.BLOCKED: "⏳",
+                    ProcessState.NEW: "🆕"
+                }.get(proc.state, "❓")
+                
+                lines.append(f"  {status_icon} {proc.name:10} [{proc.state.value:10}] "
+                           f"CPU:{proc.cpu_used:2d} "
+                           f"Rem:{proc.remaining_time:2d} "
+                           f"Wait:{proc.waiting_time:3d} "
+                           f"Mem:{proc.memory:4d}B")
+        
+        # Memoria detallada
+        lines.append(f"\n💾 MEMORIA: {self.memory.visualize(50)}")
+        mem_stats = self.memory.get_stats()
+        lines.append(f"  Total: {mem_stats['total_size']}B | "
+                     f"Usado: {mem_stats['used']}B ({mem_stats['utilization']*100:.1f}%) | "
+                     f"Fragmentación: {mem_stats['fragmentation']*100:.1f}%")
+        lines.append(f"  Bloques: {mem_stats['blocks']} | "
+                     f"Libres: {mem_stats['free_blocks']} | "
+                     f"En espera: {mem_stats['waiting_processes']}")
+        
+        # Colas
+        ready_count = len(self.scheduler.get_all_ready())
+        blocked_count = len(self.blocked_processes)
+        lines.append(f"\n📋 COLAS: Ready={ready_count} | Blocked={blocked_count} | "
+                   f"Completed={self.metrics['processes_completed']}")
+        
+        # Eventos recientes
+        lines.append("\n📜 EVENTOS RECIENTES:")
+        recent_events = self.get_recent_events(5)
+        if recent_events:
+            for event in recent_events:
+                time_str = f"{event.timestamp:03d}"
+                proc_str = f"{event.process_name}" if event.process_name else "Sistema"
+                lines.append(f"  [{time_str}] {proc_str:10} {event.description[:40]}...")
+        else:
+            lines.append("  No hay eventos recientes")
+        
+        # Métricas detalladas
+        metrics = self.get_system_metrics()
+        lines.append(f"\n📈 MÉTRICAS:")
+        lines.append(f"  • CPU: {metrics['cpu_utilization']*100:.1f}%")
+        lines.append(f"  • Throughput: {metrics['system_throughput']:.3f} proc/ciclo")
+        lines.append(f"  • Espera promedio: {metrics['avg_waiting_time']:.2f} ciclos")
+        lines.append(f"  • Cambios contexto: {metrics['context_switches']}")
+        
+        return "\n".join(lines)
+    
+    def run_simulation(self, cycles: int = 50, auto_create: bool = True, compact: bool = True):
+        """Ejecuta simulación automática"""
+        print("\n" + "="*70)
+        print("🚀 INICIANDO SIMULACIÓN DEL KERNEL")
+        print(f"📋 Planificador: {self.scheduler.policy.value}")
+        print("="*70)
+        
+        self._log_event(
+            event_type="SIMULATION_START",
+            description=f"Simulación: {cycles} ciclos"
+        )
+        
+        try:
+            for cycle in range(cycles):
+                # Crear procesos
+                if auto_create and random.random() < 0.3:
+                    self.create_process(io_required=random.random() < 0.2)
+                
+                # Ejecutar ciclo
+                self.execute_cycle()
+                
+                # Mostrar estado
+                if compact:
+                    print(self.visualize_system_compact())
+                else:
+                    if cycle % 10 == 0:
+                        print(self.visualize_system_detailed())
+                        print("-" * 70)
+                
+                time.sleep(0.1)
+                
+        except KeyboardInterrupt:
+            print("\n🛑 Simulación interrumpida")
+            self._log_event(
+                event_type="SIMULATION_INTERRUPTED",
+                description="Simulación interrumpida por usuario"
+            )
+        
+        # Resumen final
+        self.show_final_summary()
+    
+    def show_final_summary(self):
+        """Muestra resumen final"""
+        print("\n" + "="*70)
+        print("📋 RESUMEN DE SIMULACIÓN")
+        print("="*70)
+        
+        metrics = self.get_system_metrics()
+        
+        print(f"\n⏱️  TIEMPO TOTAL: {self.time} ciclos")
+        print(f"🔄 PROCESOS: {self.metrics['processes_created']} creados, "
+              f"{self.metrics['processes_completed']} completados")
+        
+        print(f"\n📊 EFICIENCIA:")
+        print(f"  • CPU: {metrics['cpu_utilization']*100:.1f}%")
+        print(f"  • Throughput: {metrics['system_throughput']:.3f} proc/ciclo")
+        print(f"  • Fragmentación: {metrics['memory_fragmentation']*100:.1f}%")
+        
+        print(f"\n⏳ TIEMPOS PROMEDIO:")
+        print(f"  • Espera: {metrics['avg_waiting_time']:.1f} ciclos")
+        print(f"  • Respuesta: {metrics['avg_response_time']:.1f} ciclos")
+        print(f"  • Retorno: {metrics['avg_turnaround_time']:.1f} ciclos")
+        
+        print(f"\n🔧 CONFIGURACIÓN:")
+        print(f"  • Planificador: {self.scheduler.policy.value}")
+        print(f"  • Memoria: {self.memory.total_size} bytes")
+        print(f"  • Quantum: {self.scheduler.quantum} ciclos")
+
+# ============================================================================
+# 5. INTERFAZ INTERACTIVA
+# ============================================================================
+
+class KernelQuestUI:
+    """Interfaz interactiva"""
+    
+    def __init__(self):
+        self.kernel = None
+        self.score = 0
+        self.level = 1
+    
+    def main_menu(self):
+        """Menú principal"""
+        while True:
+            print("""
+╔══════════════════════════════════════════════════════╗
+║           🎮 KERNEL QUEST 5.1 - CORREGIDO            ║
+╚══════════════════════════════════════════════════════╝
+
+1. 🚀 Simulación automática
+2. 🎯 Modo interactivo
+3. 📊 Ver métricas avanzadas
+4. 🚪 Salir
+            """)
+            
+            choice = input("\nOpción (1-4): ").strip()
+            
+            if choice == "1":
+                self.run_automatic_simulation()
+            elif choice == "2":
+                self.run_interactive_mode()
+            elif choice == "3":
+                self.show_advanced_metrics()
+            elif choice == "4":
+                print("\n👋 ¡Gracias por usar Kernel Quest!")
+                break
+            else:
+                print("❌ Opción inválida")
+    
+    def run_automatic_simulation(self):
+        """Ejecuta simulación automática"""
+        print("\n🔧 CONFIGURACIÓN RÁPIDA")
+        print("-" * 40)
+        
+        try:
+            cycles = int(input("Ciclos [50]: ") or "50")
+            
+            print("\n🔧 Planificador:")
+            print("1. FCFS")
+            print("2. SJF")
+            print("3. Prioridad")
+            print("4. Round Robin")
+            print("5. MLFQ")
+            
+            choice = input("Opción [4]: ").strip() or "4"
+            policies = {
+                "1": SchedulerType.FCFS,
+                "2": SchedulerType.SJF,
+                "3": SchedulerType.PRIORITY,
+                "4": SchedulerType.ROUND_ROBIN,
+                "5": SchedulerType.MLFQ
+            }
+            
+            policy = policies.get(choice, SchedulerType.ROUND_ROBIN)
+            
+            # Crear kernel
+            self.kernel = Kernel(memory_size=1024, scheduler_policy=policy)
+            
+            if policy == SchedulerType.ROUND_ROBIN:
+                quantum = int(input("Quantum [3]: ") or "3")
+                self.kernel.scheduler.quantum = quantum
+            
+            print(f"\n🎮 INICIANDO...")
+            print(f"   Planificador: {policy.value}")
+            print(f"   Ciclos: {cycles}")
+            print("-" * 40)
+            
+            self.kernel.run_simulation(cycles=cycles, compact=True)
+            
+        except ValueError as e:
+            print(f"❌ Error: {e}")
+        except KeyboardInterrupt:
+            print("\n🛑 Interrumpido")
+    
+    def run_interactive_mode(self):
+        """Modo interactivo"""
+        if not self.kernel:
+            self.kernel = Kernel()
+        
+        print("\n🎮 MODO INTERACTIVO")
+        print("=" * 60)
+        print("Comandos: create, step, stats, viz, events, exit")
+        print("-" * 60)
+        
+        while True:
+            try:
+                cmd = input("\n(kernel) >>> ").strip().split()
+                if not cmd:
+                    continue
+                
+                action = cmd[0].lower()
+                
+                if action == "exit":
+                    break
+                
+                elif action == "create":
+                    try:
+                        name = cmd[1] if len(cmd) > 1 else ""
+                        burst = int(cmd[2]) if len(cmd) > 2 else random.randint(5, 15)
+                        memory = int(cmd[3]) if len(cmd) > 3 else random.randint(10, 50)
+                        priority = int(cmd[4]) if len(cmd) > 4 else random.randint(1, 5)
+                        
+                        process = self.kernel.create_process(name, burst, memory, priority)
+                        if process:
+                            print(f"✅ {process.name} creado")
+                        else:
+                            print("❌ Error")
+                    except (ValueError, IndexError):
+                        print("❌ Uso: create [nombre] [tiempo] [memoria] [prioridad]")
+                
+                elif action == "step":
+                    self.kernel.execute_cycle()
+                    print(self.kernel.visualize_system_compact())
+                
+                elif action == "stats":
+                    metrics = self.kernel.get_system_metrics()
+                    print("\n📈 ESTADÍSTICAS:")
+                    for key, value in metrics.items():
+                        if isinstance(value, float):
+                            print(f"  {key}: {value:.3f}")
+                        else:
+                            print(f"  {key}: {value}")
+                
+                elif action == "viz":
+                    print(self.kernel.visualize_system_detailed())
+                
+                elif action == "events":
+                    try:
+                        count = int(cmd[1]) if len(cmd) > 1 else 10
+                        events = self.kernel.get_recent_events(count)
+                        print(f"\n📜 EVENTOS ({len(events)}):")
+                        for event in events:
+                            print(f"  [{event.timestamp:03d}] {event.event_type}: {event.description}")
+                    except ValueError:
+                        print("❌ Uso: events [número]")
+                
+                else:
+                    print("❌ Comando desconocido")
+            
+            except KeyboardInterrupt:
+                print("\n🛑 Comando interrumpido")
+                continue
+            except Exception as e:
+                print(f"❌ Error: {e}")
+    
+    def show_advanced_metrics(self):
+        """Muestra métricas avanzadas"""
+        if not self.kernel:
+            print("⚠️  Primero ejecuta una simulación")
+            return
+        
+        metrics = self.kernel.get_system_metrics()
+        
+        print("\n📊 MÉTRICAS AVANZADAS")
+        print("=" * 60)
+        
+        # Análisis de rendimiento
+        cpu_score = metrics['cpu_utilization'] * 100
+        throughput_score = metrics['system_throughput'] * 100
+        waiting_penalty = metrics['avg_waiting_time'] * 2
+        frag_penalty = metrics['memory_fragmentation'] * 50
+        
+        total_score = cpu_score + throughput_score - waiting_penalty - frag_penalty
+        grade = "A" if total_score > 80 else "B" if total_score > 60 else "C" if total_score > 40 else "D" if total_score > 20 else "F"
+        
+        print(f"📈 PUNTUACIÓN: {total_score:.1f}/100 ({grade})")
+        print(f"⭐ NIVEL: {self.level}")
+        
+        # Recomendaciones
+        print("\n💡 RECOMENDACIONES:")
+        if metrics['cpu_utilization'] < 0.5:
+            print("  • Considera aumentar la creación de procesos")
+        if metrics['avg_waiting_time'] > 10:
+            print("  • Considera cambiar a Round Robin o aumentar quantum")
+        if metrics['memory_fragmentation'] > 0.3:
+            print("  • Considera usar best_fit o worst_fit para memoria")
+        
+        input("\nPresiona ENTER para continuar...")
+
+# ============================================================================
+# 6. DEMO AUTOMÁTICA
+# ============================================================================
+
+def run_demo():
+    """Demo automática"""
+    print("🚀 DEMO AUTOMÁTICA - KERNEL QUEST 5.1")
+    print("=" * 60)
+    
+    # Crear kernel con Round Robin
+    kernel = Kernel(memory_size=512, scheduler_policy=SchedulerType.ROUND_ROBIN)
+    kernel.scheduler.quantum = 2
+    
+    print("Configuración:")
+    print("• Memoria: 512 bytes")
+    print("• Planificador: Round Robin")
+    print("• Quantum: 2 ciclos")
+    print("• Duración: 25 ciclos")
+    print("=" * 60)
+    
+    time.sleep(2)
+    
+    try:
+        for i in range(25):
+            # Crear procesos periódicamente
+            if i % 4 == 0 and i < 20:
+                kernel.create_process(
+                    name=f"Task{i//4}",
+                    io_required=(random.random() > 0.7)
+                )
+            
+            # Ejecutar ciclo
+            kernel.execute_cycle()
+            
+            # Limpiar pantalla
+            if os.name == 'nt':
+                os.system('cls')
+            else:
+                os.system('clear')
+            
+            # Mostrar estado
+            print(kernel.visualize_system_compact())
+            print(f"\n📊 DEMO: Ciclo {i+1}/25")
+            print("=" * 60)
+            
+            time.sleep(0.5)
+    
+    except KeyboardInterrupt:
+        print("\n🛑 Demo interrumpida")
+    
+    # Resumen
+    print("\n" + "="*40)
+    print("🏁 DEMO COMPLETADA")
+    print("="*40)
+    
+    metrics = kernel.get_system_metrics()
+    print(f"⏱️  Tiempo: {metrics['time']} ciclos")
+    print(f"✅ Completados: {metrics['processes_completed']}")
+    print(f"📈 Throughput: {metrics['system_throughput']:.3f}")
+    print(f"⏳ Espera: {metrics['avg_waiting_time']:.2f}")
+    print("="*40)
+    
+    input("\nPresiona ENTER para continuar...")
+
+# ============================================================================
+# 7. FUNCIÓN PRINCIPAL
+# ============================================================================
+
+def main():
+    """Función principal"""
+    
+    if os.name == 'nt':
+        os.system('color')
+    
+    print("""
+╔══════════════════════════════════════════════════════════════╗
+║          🚀 KERNEL QUEST 5.1 - VERSIÓN CORREGIDA            ║
+║                                                              ║
+║  Correcciones implementadas:                                 ║
+║  • Serialización corregida (bug to_dict)                    ║
+║  • Scheduler reescrito (estructura unificada)               ║
+║  • Memoria event-driven (sin esperas activas)               ║
+║  • Visualización precisa de memoria                         ║
+║  • Sistema de I/O mejorado                                  ║
+║                                                              ║
+║  ¡Kernel estable y listo para aprender!                     ║
+╚══════════════════════════════════════════════════════════════╝
+    """)
+    
+    # Opción demo rápida
+    if len(sys.argv) > 1 and sys.argv[1] == "--demo":
+        run_demo()
+        return
+    
+    try:
+        ui = KernelQuestUI()
+        ui.main_menu()
+    except KeyboardInterrupt:
+        print("\n🛑 Programa interrumpido")
+    except Exception as e:
+        print(f"\n❌ Error: {e}")
+    finally:
+        print("\n👋 ¡Hasta la próxima!")
+
+if __name__ == "__main__":
+    main()
