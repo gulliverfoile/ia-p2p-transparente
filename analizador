@@ -1,0 +1,1472 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Analizador de Texto Crítico</title>
+    <!-- Fuentes amigables -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Source+Sans+Pro:wght@300;400;600&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Inter', sans-serif;
+        }
+        
+        body {
+            background-color: #f0f2f5;
+            color: #333;
+            line-height: 1.6;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+        
+        header {
+            text-align: center;
+            background: white;
+            padding: 25px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        h1 {
+            color: #2c3e50;
+            margin-bottom: 10px;
+            font-size: 2.2rem;
+        }
+        
+        .subtitle {
+            color: #7f8c8d;
+            font-family: 'Source Sans Pro', sans-serif;
+            font-size: 1.1rem;
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        
+        .main-content {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+        
+        @media (max-width: 768px) {
+            .main-content {
+                grid-template-columns: 1fr;
+            }
+        }
+        
+        .card {
+            background: white;
+            border-radius: 10px;
+            padding: 25px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        .card h2 {
+            color: #2c3e50;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #f0f2f5;
+            font-size: 1.4rem;
+        }
+        
+        .input-section textarea {
+            width: 100%;
+            height: 300px;
+            padding: 15px;
+            border: 2px solid #e0e6ed;
+            border-radius: 8px;
+            resize: vertical;
+            font-family: 'Source Sans Pro', sans-serif;
+            font-size: 1rem;
+            line-height: 1.5;
+            margin-bottom: 15px;
+        }
+        
+        .input-section textarea:focus {
+            outline: none;
+            border-color: #4a6cf7;
+        }
+        
+        .button-group {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-top: 15px;
+        }
+        
+        .btn {
+            padding: 12px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 1rem;
+            font-weight: 600;
+            border: none;
+            transition: all 0.3s;
+        }
+        
+        .btn-analyze {
+            background: #4a6cf7;
+            color: white;
+        }
+        
+        .btn-analyze:hover {
+            background: #3a56d4;
+            transform: translateY(-2px);
+        }
+        
+        .btn-clear {
+            background: #95a5a6;
+            color: white;
+        }
+        
+        .btn-clear:hover {
+            background: #7f8c8d;
+            transform: translateY(-2px);
+        }
+        
+        .summary-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 15px;
+            margin-bottom: 25px;
+        }
+        
+        .summary-card {
+            background: #f8fafc;
+            border-radius: 8px;
+            padding: 20px;
+            text-align: center;
+            border-left: 4px solid;
+            transition: transform 0.3s;
+        }
+        
+        .summary-card:hover {
+            transform: translateY(-3px);
+        }
+        
+        .summary-card.blue {
+            border-left-color: #4a6cf7;
+            background: linear-gradient(135deg, #f8fafc 0%, #eef2ff 100%);
+        }
+        
+        .summary-card.green {
+            border-left-color: #2ecc71;
+            background: linear-gradient(135deg, #f8fafc 0%, #f0f9ff 100%);
+        }
+        
+        .summary-card.purple {
+            border-left-color: #9b59b6;
+            background: linear-gradient(135deg, #f8fafc 0%, #f9f0ff 100%);
+        }
+        
+        .summary-card.red {
+            border-left-color: #e74c3c;
+            background: linear-gradient(135deg, #f8fafc 0%, #fef5f5 100%);
+        }
+        
+        .summary-card.orange {
+            border-left-color: #f39c12;
+            background: linear-gradient(135deg, #f8fafc 0%, #fef9f0 100%);
+        }
+        
+        .summary-icon {
+            font-size: 2rem;
+            margin-bottom: 10px;
+        }
+        
+        .summary-title {
+            font-size: 0.9rem;
+            color: #7f8c8d;
+            margin-bottom: 5px;
+            font-weight: 600;
+        }
+        
+        .summary-value {
+            font-size: 1.8rem;
+            font-weight: 700;
+            color: #2c3e50;
+            margin-bottom: 5px;
+        }
+        
+        .summary-subtext {
+            font-size: 0.85rem;
+            color: #95a5a6;
+        }
+        
+        /* Sección de puntuaciones en la columna derecha - CORREGIDA */
+        .scores-section {
+            margin-top: 25px;
+            padding-top: 20px;
+            border-top: 2px solid #f0f2f5;
+        }
+        
+        .scores-section h3 {
+            color: #2c3e50;
+            margin-bottom: 15px;
+            font-size: 1.2rem;
+        }
+        
+        .scores-grid {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 15px;
+        }
+        
+        .score-item {
+            background: #f8fafc;
+            border-radius: 8px;
+            padding: 15px;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+        
+        .score-icon {
+            font-size: 1.5rem;
+            width: 50px;
+            height: 50px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 8px;
+            background: white;
+        }
+        
+        .score-details {
+            flex-grow: 1;
+        }
+        
+        .score-label {
+            font-size: 0.9rem;
+            color: #7f8c8d;
+            margin-bottom: 5px;
+            display: flex;
+            justify-content: space-between;
+        }
+        
+        .score-value {
+            font-size: 1.2rem;
+            font-weight: 700;
+            color: #2c3e50;
+        }
+        
+        .score-bar {
+            height: 8px;
+            background: #e0e6ed;
+            border-radius: 4px;
+            margin-top: 8px;
+            overflow: hidden;
+        }
+        
+        .score-fill {
+            height: 100%;
+            border-radius: 4px;
+            transition: width 1s ease;
+        }
+        
+        /* Sección de problemas con pestañas - MEJORADA */
+        .problems-section {
+            grid-column: 1 / -1;
+            margin-top: 20px;
+        }
+        
+        .tabs {
+            display: flex;
+            border-bottom: 2px solid #e0e6ed;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+        
+        .tab {
+            padding: 12px 25px;
+            background: none;
+            border: none;
+            font-size: 1rem;
+            font-weight: 600;
+            color: #7f8c8d;
+            cursor: pointer;
+            position: relative;
+            transition: color 0.3s;
+        }
+        
+        .tab:hover {
+            color: #4a6cf7;
+        }
+        
+        .tab.active {
+            color: #4a6cf7;
+        }
+        
+        .tab.active::after {
+            content: '';
+            position: absolute;
+            bottom: -2px;
+            left: 0;
+            right: 0;
+            height: 2px;
+            background: #4a6cf7;
+        }
+        
+        .tab-badge {
+            background: #e74c3c;
+            color: white;
+            font-size: 0.8rem;
+            padding: 2px 8px;
+            border-radius: 10px;
+            margin-left: 8px;
+        }
+        
+        .problems-container {
+            display: flex;
+            gap: 30px;
+            min-height: 400px;
+        }
+        
+        .problems-list {
+            flex: 1;
+            min-width: 0; /* Permite que se ajuste */
+        }
+        
+        .problems-explanations {
+            flex: 0 0 350px; /* Ancho fijo para explicaciones */
+            background: #f8fafc;
+            border-radius: 8px;
+            padding: 20px;
+            border-left: 4px solid #4a6cf7;
+        }
+        
+        .tab-content {
+            display: none;
+            animation: fadeIn 0.5s;
+        }
+        
+        .tab-content.active {
+            display: block;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+        
+        .issues-grid {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 15px;
+        }
+        
+        .issue-category {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+        }
+        
+        .issue-category h4 {
+            color: #2c3e50;
+            margin-bottom: 15px;
+            font-size: 1.1rem;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #f0f2f5;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .issue-category h4 .count {
+            background: #4a6cf7;
+            color: white;
+            font-size: 0.8rem;
+            padding: 2px 8px;
+            border-radius: 10px;
+        }
+        
+        .issue-item {
+            background: #f8fafc;
+            border-radius: 6px;
+            padding: 12px;
+            margin-bottom: 10px;
+            font-size: 0.9rem;
+            border-left: 4px solid;
+            transition: all 0.2s;
+            cursor: pointer;
+        }
+        
+        .issue-item:hover {
+            transform: translateX(5px);
+            background: #eef2ff;
+        }
+        
+        .issue-item.active {
+            background: #eef2ff;
+            box-shadow: 0 2px 8px rgba(74, 108, 247, 0.2);
+        }
+        
+        .issue-item.high {
+            border-left-color: #e74c3c;
+        }
+        
+        .issue-item.medium {
+            border-left-color: #f39c12;
+        }
+        
+        .issue-item.low {
+            border-left-color: #2ecc71;
+        }
+        
+        .issue-type {
+            font-weight: 600;
+            margin-bottom: 5px;
+            color: #2c3e50;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .issue-sentence {
+            color: #5d6d7e;
+            font-style: italic;
+            font-size: 0.85rem;
+            line-height: 1.4;
+        }
+        
+        .severity-badge {
+            font-size: 0.75rem;
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-weight: 600;
+        }
+        
+        .severity-badge.high {
+            background: #e74c3c;
+            color: white;
+        }
+        
+        .severity-badge.medium {
+            background: #f39c12;
+            color: white;
+        }
+        
+        .severity-badge.low {
+            background: #2ecc71;
+            color: white;
+        }
+        
+        /* Explicaciones */
+        .explanation-title {
+            color: #2c3e50;
+            font-size: 1.3rem;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #e0e6ed;
+        }
+        
+        .explanation-content {
+            color: #5d6d7e;
+            line-height: 1.6;
+        }
+        
+        .explanation-content p {
+            margin-bottom: 15px;
+        }
+        
+        .explanation-content strong {
+            color: #2c3e50;
+        }
+        
+        .explanation-example {
+            background: #eef2ff;
+            padding: 15px;
+            border-radius: 6px;
+            margin-top: 15px;
+            border-left: 3px solid #4a6cf7;
+        }
+        
+        .explanation-example h5 {
+            color: #4a6cf7;
+            margin-bottom: 8px;
+            font-size: 0.9rem;
+        }
+        
+        /* Sección de información útil */
+        .info-section {
+            grid-column: 1 / -1;
+            margin-top: 20px;
+            background: white;
+            border-radius: 10px;
+            padding: 25px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        .info-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-top: 15px;
+        }
+        
+        .info-card {
+            background: #f8fafc;
+            border-radius: 8px;
+            padding: 20px;
+            border-left: 4px solid #4a6cf7;
+        }
+        
+        .info-card h4 {
+            color: #2c3e50;
+            margin-bottom: 10px;
+            font-size: 1.1rem;
+        }
+        
+        .info-card p {
+            color: #5d6d7e;
+            font-size: 0.9rem;
+            line-height: 1.5;
+        }
+        
+        footer {
+            text-align: center;
+            padding: 20px;
+            color: #7f8c8d;
+            font-size: 0.9rem;
+            font-family: 'Source Sans Pro', sans-serif;
+            grid-column: 1 / -1;
+        }
+        
+        .highlight {
+            color: #4a6cf7;
+            font-weight: 600;
+        }
+        
+        .empty-state {
+            text-align: center;
+            padding: 40px 20px;
+            color: #95a5a6;
+            font-style: italic;
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 40px 20px;
+            color: #4a6cf7;
+        }
+        
+        .loading-spinner {
+            border: 3px solid #f0f2f5;
+            border-top: 3px solid #4a6cf7;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 15px;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .explanation-placeholder {
+            text-align: center;
+            padding: 40px 20px;
+            color: #95a5a6;
+        }
+        
+        .explanation-placeholder .icon {
+            font-size: 3rem;
+            margin-bottom: 15px;
+            opacity: 0.5;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Analizador de Texto Crítico</h1>
+            <p class="subtitle">Examina la estructura de cualquier texto para identificar sesgos, falacias lógicas y técnicas persuasivas. No determina la verdad del contenido, sino cómo está construido el mensaje.</p>
+        </header>
+        
+        <div class="main-content">
+            <!-- Sección de entrada -->
+            <div class="card input-section">
+                <h2>Introduce tu texto aquí</h2>
+                <textarea id="textInput" placeholder="Pega aquí el texto que quieres analizar (artículo, discurso, noticia, etc.)...">El cambio climático es la mayor amenaza que enfrenta la humanidad. Según datos científicos, la temperatura global ha aumentado 1.1°C desde la era preindustrial. Todos los políticos ignoran este problema y si no actuamos ahora, terminaremos en un desastre total. Obviamente, los que niegan el cambio climático están ciegos ante la evidencia. Nosotros, los conscientes, debemos luchar contra ellos, los negacionistas, que son nuestros enemigos en esta batalla por el planeta. Es evidente que o tomamos medidas radicales o no hay esperanza para las futuras generaciones.</textarea>
+                <div class="button-group">
+                    <button class="btn btn-analyze" id="analyzeBtn">Analizar Texto</button>
+                    <button class="btn btn-clear" id="clearBtn">Limpiar Texto</button>
+                </div>
+            </div>
+            
+            <!-- Sección de resultados -->
+            <div class="card results-section">
+                <h2>Resultados del Análisis</h2>
+                
+                <!-- Resumen ejecutivo -->
+                <div class="summary-grid" id="executiveSummary">
+                    <div class="summary-card blue">
+                        <div class="summary-icon">📊</div>
+                        <div class="summary-title">TIPO DE TEXTO</div>
+                        <div class="summary-value">-</div>
+                        <div class="summary-subtext">Esperando análisis</div>
+                    </div>
+                    
+                    <div class="summary-card green">
+                        <div class="summary-icon">⚠️</div>
+                        <div class="summary-title">PROBLEMAS</div>
+                        <div class="summary-value">0</div>
+                        <div class="summary-subtext">Detectados</div>
+                    </div>
+                    
+                    <div class="summary-card purple">
+                        <div class="summary-icon">⚖️</div>
+                        <div class="summary-title">HECHOS:OPINIONES</div>
+                        <div class="summary-value">-:-</div>
+                        <div class="summary-subtext">Ratio -:-</div>
+                    </div>
+                    
+                    <div class="summary-card red">
+                        <div class="summary-icon">🧠</div>
+                        <div class="summary-title">RIESGO NARRATIVO</div>
+                        <div class="summary-value">0%</div>
+                        <div class="summary-subtext">Evaluación estructural</div>
+                    </div>
+                </div>
+                
+                <!-- Puntuaciones detalladas - CORREGIDO -->
+                <div class="scores-section">
+                    <h3>Puntuaciones Detalladas</h3>
+                    <div class="scores-grid" id="scoresGrid">
+                        <div class="score-item">
+                            <div class="score-icon">⚖️</div>
+                            <div class="score-details">
+                                <div class="score-label">
+                                    <span>Objetividad</span>
+                                    <span id="objectivityScore">0%</span>
+                                </div>
+                                <div class="score-bar">
+                                    <div class="score-fill" id="objectivityBar" style="width: 0%; background: #4a6cf7;"></div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="score-item">
+                            <div class="score-icon">⚠️</div>
+                            <div class="score-details">
+                                <div class="score-label">
+                                    <span>Riesgo de Manipulación</span>
+                                    <span id="riskScore">0%</span>
+                                </div>
+                                <div class="score-bar">
+                                    <div class="score-fill" id="riskBar" style="width: 0%; background: #e74c3c;"></div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="score-item">
+                            <div class="score-icon">📈</div>
+                            <div class="score-details">
+                                <div class="score-label">
+                                    <span>Credibilidad Estructural</span>
+                                    <span id="credibilityScore">0%</span>
+                                </div>
+                                <div class="score-bar">
+                                    <div class="score-fill" id="credibilityBar" style="width: 0%; background: #2ecc71;"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Sección de problemas con pestañas - MEJORADA -->
+            <div class="card problems-section">
+                <h2>Problemas Detectados</h2>
+                <div class="tabs" id="problemsTabs">
+                    <button class="tab active" data-tab="all">Todos los Problemas</button>
+                    <button class="tab" data-tab="fallacies">Falacias Lógicas <span class="tab-badge" id="fallaciesBadge">0</span></button>
+                    <button class="tab" data-tab="propaganda">Propaganda <span class="tab-badge" id="propagandaBadge">0</span></button>
+                    <button class="tab" data-tab="biases">Sesgos Cognitivos <span class="tab-badge" id="biasesBadge">0</span></button>
+                    <button class="tab" data-tab="emotional">Lenguaje Emocional <span class="tab-badge" id="emotionalBadge">0</span></button>
+                </div>
+                
+                <!-- Contenedor principal para problemas y explicaciones -->
+                <div class="problems-container">
+                    <!-- Lista de problemas -->
+                    <div class="problems-list">
+                        <!-- Contenido de las pestañas -->
+                        <div class="tab-content active" id="tab-all">
+                            <div class="empty-state">Ejecuta el análisis para ver los problemas detectados</div>
+                        </div>
+                        
+                        <div class="tab-content" id="tab-fallacies">
+                            <div class="empty-state">No se han detectado falacias lógicas</div>
+                        </div>
+                        
+                        <div class="tab-content" id="tab-propaganda">
+                            <div class="empty-state">No se han detectado técnicas de propaganda</div>
+                        </div>
+                        
+                        <div class="tab-content" id="tab-biases">
+                            <div class="empty-state">No se han detectado sesgos cognitivos</div>
+                        </div>
+                        
+                        <div class="tab-content" id="tab-emotional">
+                            <div class="empty-state">No se ha detectado lenguaje emocional excesivo</div>
+                        </div>
+                    </div>
+                    
+                    <!-- Panel de explicaciones -->
+                    <div class="problems-explanations" id="explanationsPanel">
+                        <div class="explanation-placeholder">
+                            <div class="icon">💡</div>
+                            <h3>Selecciona un problema</h3>
+                            <p>Haz clic en cualquier problema de la lista para ver su explicación detallada.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Sección de información útil -->
+            <div class="info-section">
+                <h2>Información Útil</h2>
+                <div class="info-grid">
+                    <div class="info-card">
+                        <h4>¿Cómo interpretar los resultados?</h4>
+                        <p>Esta herramienta analiza la <strong>estructura</strong> del texto, no su veracidad. Un alto riesgo de manipulación no significa que la información sea falsa, sino que el mensaje está construido de forma persuasiva o emocional.</p>
+                    </div>
+                    
+                    <div class="info-card">
+                        <h4>Tipos de texto identificados</h4>
+                        <p><strong>Informativo:</strong> Predominan hechos y datos.<br>
+                           <strong>Opinativo:</strong> Predominan opiniones personales.<br>
+                           <strong>Emocional:</strong> Uso intenso de lenguaje emocional.<br>
+                           <strong>Mixto:</strong> Combinación equilibrada.</p>
+                    </div>
+                    
+                    <div class="info-card">
+                        <h4>Consejos para análisis crítico</h4>
+                        <p>1. Verifica las fuentes de los datos mencionados.<br>
+                           2. Busca contraargumentos o perspectivas alternativas.<br>
+                           3. Identifica quién se beneficia del mensaje.<br>
+                           4. Distingue entre hechos comprobables y opiniones.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <footer>
+            <p>Esta herramienta es <span class="highlight">educativa</span> y no reemplaza el pensamiento crítico humano. Analiza la estructura del texto, no verifica la veracidad de los hechos.</p>
+        </footer>
+    </div>
+
+    <script>
+        // Elementos del DOM
+        const textInput = document.getElementById('textInput');
+        const analyzeBtn = document.getElementById('analyzeBtn');
+        const clearBtn = document.getElementById('clearBtn');
+        const executiveSummary = document.getElementById('executiveSummary');
+        const scoresGrid = document.getElementById('scoresGrid');
+        const explanationsPanel = document.getElementById('explanationsPanel');
+        
+        // Elementos de puntuaciones
+        const objectivityScore = document.getElementById('objectivityScore');
+        const riskScore = document.getElementById('riskScore');
+        const credibilityScore = document.getElementById('credibilityScore');
+        const objectivityBar = document.getElementById('objectivityBar');
+        const riskBar = document.getElementById('riskBar');
+        const credibilityBar = document.getElementById('credibilityBar');
+        
+        // Elementos de pestañas
+        const problemsTabs = document.getElementById('problemsTabs');
+        const tabContents = document.querySelectorAll('.tab-content');
+        const tabButtons = document.querySelectorAll('.tab');
+        
+        // Badges de pestañas
+        const fallaciesBadge = document.getElementById('fallaciesBadge');
+        const propagandaBadge = document.getElementById('propagandaBadge');
+        const biasesBadge = document.getElementById('biasesBadge');
+        const emotionalBadge = document.getElementById('emotionalBadge');
+        
+        // Variables globales
+        let currentAnalysis = null;
+        let currentSelectedIssue = null;
+        
+        // Diccionario de explicaciones para cada tipo de problema
+        const problemExplanations = {
+            "Falso dilema": {
+                title: "Falso Dilema (Falsa Dicotomía)",
+                description: "Esta falacia presenta una situación como si solo hubiera dos opciones extremas y mutuamente excluyentes, ignorando soluciones intermedias o alternativas. Es una técnica retórica que fuerza al receptor a elegir entre dos posiciones, cuando en realidad existen más opciones.",
+                example: "Ejemplo: 'O estás con nosotros o contra nosotros' o 'O apoyas completamente esta ley o quieres el colapso total del sistema'."
+            },
+            "Pendiente resbaladiza": {
+                title: "Pendiente Resbaladiza",
+                description: "Falacia que argumenta que un primer paso pequeño llevará inevitablemente a una cadena de eventos que terminarán en un resultado catastrófico, sin proporcionar evidencia suficiente de que esa progresión ocurrirá. Suele usarse para generar miedo y rechazo hacia cambios o propuestas.",
+                example: "Ejemplo: 'Si permitimos que las parejas homosexuales se casen, pronto la gente querrá casarse con animales o con objetos inanimados'."
+            },
+            "Generalización apresurada": {
+                title: "Generalización Apresurada",
+                description: "Falacia que consiste en sacar una conclusión general a partir de una muestra insuficiente, no representativa o anecdótica. Es una forma de razonamiento inductivo débil donde se extrapola injustificadamente de casos particulares a reglas generales.",
+                example: "Ejemplo: 'Conozco a dos personas de ese país que son deshonestas, por lo tanto todas las personas de ese país son deshonestas'."
+            },
+            "Argumento circular": {
+                title: "Argumento Circular",
+                description: "Falacia lógica en la que la conclusión se incluye en las premisas, creando un razonamiento que no avanza. La razón para creer algo es que ya se cree en ello, sin aportar evidencia externa. También conocido como 'petitio principii'.",
+                example: "Ejemplo: 'La Biblia es la palabra de Dios porque así lo dice la Biblia' o 'Debes confiar en mí porque soy una persona confiable'."
+            },
+            "Ad hominem": {
+                title: "Ataque Ad Hominem",
+                description: "Falacia que consiste en atacar a la persona que hace un argumento en lugar de refutar el argumento en sí. Se desvía la atención del contenido del mensaje hacia características personales del emisor, como su carácter, apariencia o antecedentes.",
+                example: "Ejemplo: 'No puedes tomar en serio su opinión sobre economía porque ni siquiera terminó la universidad' (sin refutar sus argumentos económicos)."
+            },
+            "Nosotros vs Ellos": {
+                title: "Nosotros vs Ellos (Polarización Grupal)",
+                description: "Técnica de propaganda que divide a las personas en dos grupos opuestos y antagónicos, creando un sentimiento de pertenencia a un grupo ('nosotros') y de rechazo al otro ('ellos'). Fomenta el tribalismo, la deshumanización del oponente y reduce la complejidad a un conflicto binario.",
+                example: "Ejemplo: 'Nosotros, los patriotas que amamos nuestro país, contra ellos, los traidores que quieren destruirlo' o 'Los buenos contra los malos'."
+            },
+            "Apelación al miedo": {
+                title: "Apelación al Miedo",
+                description: "Técnica retórica que busca generar miedo, ansiedad o pánico en la audiencia para que acepte una proposición o tome una decisión específica. El miedo nubla el juicio crítico y hace que las personas sean más susceptibles a mensajes autoritarios o soluciones simplistas.",
+                example: "Ejemplo: 'Si no votas por mí, vendrán los inmigrantes a quitarte tu trabajo y violar a tus mujeres' o 'Si no actuamos ya, este problema destruirá por completo nuestra forma de vida'."
+            },
+            "Culto a la personalidad": {
+                title: "Culto a la Personalidad",
+                description: "Técnica de propaganda que exalta la figura de un líder presentándolo como heroico, divino, infalible o excepcional. Busca crear una lealtad ciega, desalentar el pensamiento crítico hacia el líder y centralizar la autoridad en una sola persona.",
+                example: "Ejemplo: 'Nuestro líder es el salvador de la patria, el padre de la nación, el faro que nos guía en la oscuridad. Debemos seguirlo ciegamente en todo lo que diga'."
+            },
+            "Sesgo de confirmación": {
+                title: "Sesgo de Confirmación",
+                description: "Tendencia cognitiva a buscar, interpretar o recordar información que confirma las propias creencias o hipótesis preexistentes, ignorando o desestimando evidencia contraria. En un texto, se manifiesta como afirmaciones que presentan una creencia como obvia, incuestionable o ampliamente aceptada sin pruebas sólidas.",
+                example: "Ejemplo: 'Obviamente, nuestra política económica es la correcta, como demuestran todos los expertos serios' (sin citar fuentes específicas o mencionando solo expertos afines)."
+            },
+            "Apelación a la autoridad": {
+                title: "Apelación a la Autoridad (Argumentum ad Verecundiam)",
+                description: "Falacia que argumenta que algo es verdadero o correcto porque una autoridad o experto lo dice, sin proporcionar evidencia adicional o cuando la autoridad no es experta en el tema en cuestión. Es problemática cuando hay desacuerdo entre expertos o cuando la autoridad citada tiene conflictos de interés.",
+                example: "Ejemplo: 'El profesor X, premio Nobel de física, dice que la homeopatía funciona, por lo tanto es cierta' (aunque la homeopatía no es física) o 'Mi abuelo, que vivió 90 años, decía que fumar no era malo, así que debe tener razón'."
+            },
+            "Normalización de asunciones": {
+                title: "Normalización de Supuestos (Asunción de la Premisa)",
+                description: "Presentar una afirmación controvertida, no probada o cuestionable como si fuera un hecho natural, obvio, inevitable o ampliamente aceptado, evitando así tener que justificarla o argumentarla. Crea un marco de referencia que da por sentado lo que debería demostrarse.",
+                example: "Ejemplo: 'Como es natural, los hombres son más aptos para la ingeniería que las mujeres' (asume una premisa no probada sobre diferencias innatas) o 'Todo el mundo sabe que el sistema actual es injusto' (sin demostrar por qué)."
+            },
+            "Lenguaje emotivo intenso": {
+                title: "Lenguaje Emotivo Intenso",
+                description: "Uso de palabras cargadas emocionalmente, superlativos extremos o calificativos dramáticos para provocar una respuesta emocional intensa en el receptor, en lugar de apelar a su razonamiento lógico o presentar argumentos sólidos. Puede ser indicativo de manipulación emocional o de falta de sustancia argumentativa.",
+                example: "Ejemplo: 'Es absolutamente vergonzoso, repugnante e inmoral que el gobierno permita esta situación horrenda que destroza la vida de inocentes'."
+            },
+            "Lenguaje excesivamente positivo": {
+                title: "Lenguaje Excesivamente Positivo (Eufemismo Extremo)",
+                description: "Uso de adjetivos y adverbios extremadamente positivos, idealizadores o eufemísticos para crear una imagen excesivamente favorable, a menudo sin base en la realidad o ocultando aspectos problemáticos. Puede ser una forma de propaganda, publicidad engañosa o autoengaño.",
+                example: "Ejemplo: 'Nuestro producto es absolutamente maravilloso, increíble, revolucionario, cambiará tu vida por completo y te hará inmensamente feliz para siempre' (sin evidencias concretas)."
+            },
+            "Falacia del hombre de paja": {
+                title: "Falacia del Hombre de Paja",
+                description: "Consiste en caricaturizar, distorsionar o exagerar la posición del oponente para refutarla más fácilmente, atacando así una versión debilitada o falsa del argumento real. En lugar de enfrentar el argumento genuino, se crea un 'hombre de paja' (argumento débil) para derribarlo.",
+                example: "Ejemplo: 'Los que quieren reducir el gasto militar evidentemente quieren dejar nuestro país indefenso y a merced de los terroristas' (cuando en realidad proponen una reducción moderada, no el desarme total)."
+            }
+        };
+        
+        // Función principal de análisis
+        function performAnalysis(text) {
+            const sentences = text.split(/[.!?]+/).filter(s => s.trim().length > 0);
+            const words = text.trim().split(/\s+/);
+            
+            const analysis = {
+                general: {
+                    totalWords: words.length,
+                    totalSentences: sentences.length,
+                    totalCharacters: text.length,
+                    readingTime: Math.ceil(words.length / 200),
+                    factualSentences: 0,
+                    opinionSentences: 0,
+                    emotionalSentences: 0,
+                    textType: "indeterminado"
+                },
+                issues: {
+                    fallacies: [],
+                    propaganda: [],
+                    biases: [],
+                    emotionalLanguage: []
+                },
+                scores: {
+                    objectivity: 75,
+                    manipulationRisk: 30,
+                    credibility: 65
+                }
+            };
+            
+            // Patrones para clasificar oraciones
+            const structuralPatterns = {
+                factual: /(según|datos|porcentaje|estudio|encuesta|informe|estadística|científicos|investigación|cifras|publicado en|demuestra que)/gi,
+                opinion: /(creo|pienso|opino|considero|me parece|en mi opinión|desde mi punto de vista|en mi experiencia)/gi,
+                emotional: /(amenaza|desastre|enemigos|traición|crisis|vergüenza|peligro|catástrofe|desesperación|horroroso|terrible|inaceptable)/gi
+            };
+            
+            // Patrones estructurales que aumentan credibilidad
+            const structureBoost = /(%|porcentaje|encuesta|según datos|informe anual|comparado con|estudio de|investigadores|publicado por|fuente:|referencia:)/gi;
+            
+            // Patrones para detectar problemas (versión expandida)
+            const patterns = {
+                fallacies: [
+                    {pattern: /(o [^,]+ o [^,.]+|no hay término medio|blanco o negro)/gi, name: "Falso dilema", severity: "high"},
+                    {pattern: /(si [^,]+ entonces|terminaremos en|llevará a|inevitablemente)/gi, name: "Pendiente resbaladiza", severity: "medium"},
+                    {pattern: /(todos los|siempre|nunca|nadie|absolutamente todos|cada uno)/gi, name: "Generalización apresurada", severity: "low"},
+                    {pattern: /(porque sí|es así y punto|no hace falta explicarlo)/gi, name: "Argumento circular", severity: "high"},
+                    {pattern: /(eres un|estás loco|no sabes nada|ignorante)/gi, name: "Ad hominem", severity: "high"}
+                ],
+                propaganda: [
+                    {pattern: /(nosotros|ellos|enemigos|adversarios|contrarios|los otros)/gi, name: "Nosotros vs Ellos", severity: "high"},
+                    {pattern: /(peligro|crisis|desastre|amenaza|catástrofe|alerta roja)/gi, name: "Apelación al miedo", severity: "high"},
+                    {pattern: /(héroe|salvador|libertador|mesías|iluminado)/gi, name: "Culto a la personalidad", severity: "medium"}
+                ],
+                biases: [
+                    {pattern: /(obviamente|sin duda|es evidente|claramente|indudablemente)/gi, name: "Sesgo de confirmación", severity: "medium"},
+                    {pattern: /(los expertos dicen|todo el mundo sabe|es ampliamente conocido)/gi, name: "Apelación a la autoridad", severity: "low"},
+                    {pattern: /(como es natural|lógicamente|como todos sabemos)/gi, name: "Normalización de asunciones", severity: "medium"}
+                ],
+                emotionalLanguage: [
+                    {pattern: /(desastroso|terrible|horrible|espantoso|inaceptable|vergonzoso|escandaloso)/gi, name: "Lenguaje emotivo intenso", severity: "medium"},
+                    {pattern: /(maravilloso|increíble|fantástico|perfecto|ideal)/gi, name: "Lenguaje excesivamente positivo", severity: "low"}
+                ]
+            };
+            
+            let structureSignals = 0;
+            
+            // Analizar cada oración
+            sentences.forEach((s, i) => {
+                const sentence = s.trim();
+                if (sentence.length === 0) return;
+                
+                if (structuralPatterns.factual.test(sentence)) analysis.general.factualSentences++;
+                if (structuralPatterns.opinion.test(sentence)) analysis.general.opinionSentences++;
+                if (structuralPatterns.emotional.test(sentence)) analysis.general.emotionalSentences++;
+                if (structureBoost.test(sentence)) structureSignals++;
+                
+                // Detectar falacias
+                patterns.fallacies.forEach(f => {
+                    if (f.pattern.test(sentence)) {
+                        analysis.issues.fallacies.push({
+                            type: f.name,
+                            sentence: sentence,
+                            severity: f.severity,
+                            position: i
+                        });
+                    }
+                });
+                
+                // Detectar propaganda
+                patterns.propaganda.forEach(p => {
+                    if (p.pattern.test(sentence)) {
+                        analysis.issues.propaganda.push({
+                            type: p.name,
+                            sentence: sentence,
+                            severity: p.severity,
+                            position: i
+                        });
+                    }
+                });
+                
+                // Detectar sesgos
+                patterns.biases.forEach(b => {
+                    if (b.pattern.test(sentence)) {
+                        analysis.issues.biases.push({
+                            type: b.name,
+                            sentence: sentence,
+                            severity: b.severity,
+                            position: i
+                        });
+                    }
+                });
+                
+                // Detectar lenguaje emocional
+                patterns.emotionalLanguage.forEach(e => {
+                    if (e.pattern.test(sentence)) {
+                        analysis.issues.emotionalLanguage.push({
+                            type: e.name,
+                            sentence: sentence,
+                            severity: e.severity,
+                            position: i
+                        });
+                    }
+                });
+            });
+            
+            // Determinar tipo de texto
+            if (analysis.general.factualSentences > analysis.general.opinionSentences && 
+                analysis.general.factualSentences > analysis.general.emotionalSentences) {
+                analysis.general.textType = "Informativo";
+            } else if (analysis.general.emotionalSentences > analysis.general.factualSentences && 
+                       analysis.general.emotionalSentences > analysis.general.opinionSentences) {
+                analysis.general.textType = "Emocional/Agitativo";
+            } else if (analysis.general.opinionSentences > analysis.general.factualSentences) {
+                analysis.general.textType = "Opinativo/Persuasivo";
+            } else {
+                analysis.general.textType = "Mixto";
+            }
+            
+            // Calcular problemas totales
+            analysis.general.totalProblems = 
+                analysis.issues.fallacies.length + 
+                analysis.issues.propaganda.length + 
+                analysis.issues.biases.length +
+                analysis.issues.emotionalLanguage.length;
+            
+            // Calcular riesgo de manipulación
+            let risk = analysis.general.totalProblems * 8 + 
+                      analysis.general.emotionalSentences * 3 - 
+                      structureSignals * 4;
+            
+            // Ajustar basado en proporción hechos/opiniones
+            const factOpinionRatio = analysis.general.factualSentences > 0 ? 
+                analysis.general.opinionSentences / analysis.general.factualSentences : 5;
+            
+            if (factOpinionRatio > 2) risk += 15;
+            if (factOpinionRatio > 4) risk += 10;
+            
+            // Limitar entre 5 y 95
+            risk = Math.max(5, Math.min(95, risk));
+            
+            analysis.scores.manipulationRisk = Math.round(risk);
+            analysis.scores.objectivity = Math.round(100 - risk);
+            analysis.scores.credibility = Math.max(20, Math.min(95, 
+                60 + (structureSignals * 5) - (analysis.general.totalProblems * 3)
+            ));
+            
+            // Calcular ratio hechos/opiniones
+            analysis.general.factToOpinionRatio = analysis.general.factualSentences > 0 ? 
+                (analysis.general.factualSentences / (analysis.general.opinionSentences || 1)).toFixed(1) : "0";
+            
+            return analysis;
+        }
+        
+        // Mostrar resumen ejecutivo
+        function displayExecutiveSummary(analysis) {
+            // Determinar color del card de riesgo
+            let riskColorClass = 'red';
+            if (analysis.scores.manipulationRisk <= 40) {
+                riskColorClass = 'green';
+            } else if (analysis.scores.manipulationRisk <= 70) {
+                riskColorClass = 'orange';
+            }
+            
+            // Determinar color del card de problemas
+            let problemColorClass = 'green';
+            if (analysis.general.totalProblems > 8) {
+                problemColorClass = 'red';
+            } else if (analysis.general.totalProblems > 4) {
+                problemColorClass = 'orange';
+            }
+            
+            executiveSummary.innerHTML = `
+                <div class="summary-card blue">
+                    <div class="summary-icon">📊</div>
+                    <div class="summary-title">TIPO DE TEXTO</div>
+                    <div class="summary-value">${analysis.general.textType}</div>
+                    <div class="summary-subtext">${analysis.general.totalSentences} oraciones</div>
+                </div>
+                
+                <div class="summary-card ${problemColorClass}">
+                    <div class="summary-icon">⚠️</div>
+                    <div class="summary-title">PROBLEMAS</div>
+                    <div class="summary-value">${analysis.general.totalProblems}</div>
+                    <div class="summary-subtext">Detectados</div>
+                </div>
+                
+                <div class="summary-card purple">
+                    <div class="summary-icon">⚖️</div>
+                    <div class="summary-title">HECHOS:OPINIONES</div>
+                    <div class="summary-value">${analysis.general.factualSentences}:${analysis.general.opinionSentences}</div>
+                    <div class="summary-subtext">Ratio ${analysis.general.factToOpinionRatio}:1</div>
+                </div>
+                
+                <div class="summary-card ${riskColorClass}">
+                    <div class="summary-icon">🧠</div>
+                    <div class="summary-title">RIESGO NARRATIVO</div>
+                    <div class="summary-value">${analysis.scores.manipulationRisk}%</div>
+                    <div class="summary-subtext">Evaluación estructural</div>
+                </div>
+            `;
+        }
+        
+        // Mostrar puntuaciones - CORREGIDO (sin carga infinita)
+        function displayScores(analysis) {
+            objectivityScore.textContent = `${analysis.scores.objectivity}%`;
+            riskScore.textContent = `${analysis.scores.manipulationRisk}%`;
+            credibilityScore.textContent = `${analysis.scores.credibility}%`;
+            
+            objectivityBar.style.width = `${analysis.scores.objectivity}%`;
+            riskBar.style.width = `${analysis.scores.manipulationRisk}%`;
+            credibilityBar.style.width = `${analysis.scores.credibility}%`;
+            
+            // Cambiar color de la barra de riesgo según el nivel
+            if (analysis.scores.manipulationRisk > 70) {
+                riskBar.style.background = '#e74c3c';
+            } else if (analysis.scores.manipulationRisk > 40) {
+                riskBar.style.background = '#f39c12';
+            } else {
+                riskBar.style.background = '#2ecc71';
+            }
+        }
+        
+        // Mostrar explicación de un problema
+        function displayExplanation(problemType) {
+            const explanation = problemExplanations[problemType];
+            
+            if (explanation) {
+                explanationsPanel.innerHTML = `
+                    <h3 class="explanation-title">${explanation.title}</h3>
+                    <div class="explanation-content">
+                        <p><strong>Descripción:</strong> ${explanation.description}</p>
+                        <div class="explanation-example">
+                            <h5>Ejemplo:</h5>
+                            <p>${explanation.example}</p>
+                        </div>
+                    </div>
+                `;
+            } else {
+                explanationsPanel.innerHTML = `
+                    <div class="explanation-placeholder">
+                        <div class="icon">❓</div>
+                        <h3>${problemType}</h3>
+                        <p>No hay una explicación detallada disponible para este problema específico.</p>
+                    </div>
+                `;
+            }
+        }
+        
+        // Mostrar problemas en las pestañas
+        function displayProblems(analysis) {
+            // Actualizar badges
+            fallaciesBadge.textContent = analysis.issues.fallacies.length;
+            propagandaBadge.textContent = analysis.issues.propaganda.length;
+            biasesBadge.textContent = analysis.issues.biases.length;
+            emotionalBadge.textContent = analysis.issues.emotionalLanguage.length;
+            
+            // Función para crear HTML de un problema
+            function createIssueHTML(issue) {
+                const severityText = issue.severity === 'high' ? 'Alto' : issue.severity === 'medium' ? 'Medio' : 'Bajo';
+                return `
+                    <div class="issue-item ${issue.severity}" data-type="${issue.type}">
+                        <div class="issue-type">
+                            ${issue.type}
+                            <span class="severity-badge ${issue.severity}">${severityText}</span>
+                        </div>
+                        <div class="issue-sentence">"${issue.sentence.length > 120 ? issue.sentence.substring(0, 120) + '...' : issue.sentence}"</div>
+                    </div>
+                `;
+            }
+            
+            // Mostrar todos los problemas en la pestaña "all"
+            const allIssues = [
+                ...analysis.issues.fallacies,
+                ...analysis.issues.propaganda,
+                ...analysis.issues.biases,
+                ...analysis.issues.emotionalLanguage
+            ];
+            
+            // Ordenar por severidad (high primero)
+            allIssues.sort((a, b) => {
+                const severityOrder = { high: 3, medium: 2, low: 1 };
+                return severityOrder[b.severity] - severityOrder[a.severity];
+            });
+            
+            if (allIssues.length > 0) {
+                document.getElementById('tab-all').innerHTML = `
+                    <div class="issues-grid">
+                        <div class="issue-category">
+                            <h4>Todos los problemas <span class="count">${allIssues.length}</span></h4>
+                            ${allIssues.map(createIssueHTML).join('')}
+                        </div>
+                    </div>
+                `;
+            } else {
+                document.getElementById('tab-all').innerHTML = '<div class="empty-state">No se han detectado problemas en el texto</div>';
+            }
+            
+            // Mostrar falacias
+            if (analysis.issues.fallacies.length > 0) {
+                document.getElementById('tab-fallacies').innerHTML = `
+                    <div class="issues-grid">
+                        <div class="issue-category">
+                            <h4>Falacias Lógicas <span class="count">${analysis.issues.fallacies.length}</span></h4>
+                            ${analysis.issues.fallacies.map(createIssueHTML).join('')}
+                        </div>
+                    </div>
+                `;
+            } else {
+                document.getElementById('tab-fallacies').innerHTML = '<div class="empty-state">No se han detectado falacias lógicas</div>';
+            }
+            
+            // Mostrar propaganda
+            if (analysis.issues.propaganda.length > 0) {
+                document.getElementById('tab-propaganda').innerHTML = `
+                    <div class="issues-grid">
+                        <div class="issue-category">
+                            <h4>Técnicas de Propaganda <span class="count">${analysis.issues.propaganda.length}</span></h4>
+                            ${analysis.issues.propaganda.map(createIssueHTML).join('')}
+                        </div>
+                    </div>
+                `;
+            } else {
+                document.getElementById('tab-propaganda').innerHTML = '<div class="empty-state">No se han detectado técnicas de propaganda</div>';
+            }
+            
+            // Mostrar sesgos
+            if (analysis.issues.biases.length > 0) {
+                document.getElementById('tab-biases').innerHTML = `
+                    <div class="issues-grid">
+                        <div class="issue-category">
+                            <h4>Sesgos Cognitivos <span class="count">${analysis.issues.biases.length}</span></h4>
+                            ${analysis.issues.biases.map(createIssueHTML).join('')}
+                        </div>
+                    </div>
+                `;
+            } else {
+                document.getElementById('tab-biases').innerHTML = '<div class="empty-state">No se han detectado sesgos cognitivos</div>';
+            }
+            
+            // Mostrar lenguaje emocional
+            if (analysis.issues.emotionalLanguage.length > 0) {
+                document.getElementById('tab-emotional').innerHTML = `
+                    <div class="issues-grid">
+                        <div class="issue-category">
+                            <h4>Lenguaje Emocional <span class="count">${analysis.issues.emotionalLanguage.length}</span></h4>
+                            ${analysis.issues.emotionalLanguage.map(createIssueHTML).join('')}
+                        </div>
+                    </div>
+                `;
+            } else {
+                document.getElementById('tab-emotional').innerHTML = '<div class="empty-state">No se ha detectado lenguaje emocional excesivo</div>';
+            }
+            
+            // Agregar event listeners a los problemas
+            document.querySelectorAll('.issue-item').forEach(item => {
+                item.addEventListener('click', function() {
+                    // Remover clase active de todos los items
+                    document.querySelectorAll('.issue-item').forEach(i => i.classList.remove('active'));
+                    // Añadir clase active al item clickeado
+                    this.classList.add('active');
+                    
+                    const problemType = this.getAttribute('data-type');
+                    currentSelectedIssue = problemType;
+                    displayExplanation(problemType);
+                });
+            });
+        }
+        
+        // Función para cambiar pestañas
+        function switchTab(tabName) {
+            // Ocultar todos los contenidos
+            tabContents.forEach(tab => {
+                tab.classList.remove('active');
+            });
+            
+            // Mostrar el contenido seleccionado
+            document.getElementById(`tab-${tabName}`).classList.add('active');
+            
+            // Actualizar botones activos
+            tabButtons.forEach(button => {
+                button.classList.remove('active');
+                if (button.getAttribute('data-tab') === tabName) {
+                    button.classList.add('active');
+                }
+            });
+            
+            // Mostrar placeholder en explicaciones si no hay problema seleccionado
+            if (!currentSelectedIssue) {
+                explanationsPanel.innerHTML = `
+                    <div class="explanation-placeholder">
+                        <div class="icon">💡</div>
+                        <h3>Selecciona un problema</h3>
+                        <p>Haz clic en cualquier problema de la lista para ver su explicación detallada.</p>
+                    </div>
+                `;
+            }
+        }
+        
+        // Función principal para ejecutar el análisis
+        function runAnalysis() {
+            const text = textInput.value.trim();
+            
+            if (text.length < 20) {
+                alert("Por favor, introduce un texto más largo (mínimo 20 caracteres).");
+                return;
+            }
+            
+            // Mostrar estado de carga
+            executiveSummary.innerHTML = `
+                <div class="summary-card blue" style="grid-column: 1 / 3;">
+                    <div class="summary-icon">
+                        <div class="loading-spinner"></div>
+                    </div>
+                    <div class="summary-title">ANALIZANDO TEXTO</div>
+                    <div class="summary-value">Procesando...</div>
+                    <div class="summary-subtext">Esto tomará solo unos segundos</div>
+                </div>
+            `;
+            
+            // Mostrar loading en puntuaciones (sin reemplazar toda la estructura)
+            objectivityScore.textContent = "...";
+            riskScore.textContent = "...";
+            credibilityScore.textContent = "...";
+            objectivityBar.style.width = "0%";
+            riskBar.style.width = "0%";
+            credibilityBar.style.width = "0%";
+            
+            // Mostrar loading en pestañas
+            tabContents.forEach(tab => {
+                tab.innerHTML = '<div class="loading"><div class="loading-spinner"></div><p>Analizando problemas...</p></div>';
+            });
+            
+            // Mostrar loading en explicaciones
+            explanationsPanel.innerHTML = `
+                <div class="explanation-placeholder">
+                    <div class="loading-spinner"></div>
+                    <p>Analizando texto...</p>
+                </div>
+            `;
+            
+            // Cambiar texto del botón
+            analyzeBtn.textContent = "Analizando...";
+            analyzeBtn.disabled = true;
+            
+            // Ejecutar análisis después de un breve retraso para mejor UX
+            setTimeout(() => {
+                currentAnalysis = performAnalysis(text);
+                
+                // Mostrar resultados
+                displayExecutiveSummary(currentAnalysis);
+                displayScores(currentAnalysis);
+                displayProblems(currentAnalysis);
+                
+                // Restaurar botón
+                analyzeBtn.textContent = "Analizar Texto";
+                analyzeBtn.disabled = false;
+                
+                // Efecto visual
+                analyzeBtn.style.background = "#2ecc71";
+                setTimeout(() => {
+                    analyzeBtn.style.background = "#4a6cf7";
+                }, 1000);
+                
+            }, 800);
+        }
+        
+        // Función para limpiar el texto
+        function clearText() {
+            textInput.value = "";
+            textInput.focus();
+            
+            // Restablecer UI a estado inicial
+            executiveSummary.innerHTML = `
+                <div class="summary-card blue">
+                    <div class="summary-icon">📊</div>
+                    <div class="summary-title">TIPO DE TEXTO</div>
+                    <div class="summary-value">-</div>
+                    <div class="summary-subtext">Esperando análisis</div>
+                </div>
+                
+                <div class="summary-card green">
+                    <div class="summary-icon">⚠️</div>
+                    <div class="summary-title">PROBLEMAS</div>
+                    <div class="summary-value">0</div>
+                    <div class="summary-subtext">Detectados</div>
+                </div>
+                
+                <div class="summary-card purple">
+                    <div class="summary-icon">⚖️</div>
+                    <div class="summary-title">HECHOS:OPINIONES</div>
+                    <div class="summary-value">-:-</div>
+                    <div class="summary-subtext">Ratio -:-</div>
+                </div>
+                
+                <div class="summary-card red">
+                    <div class="summary-icon">🧠</div>
+                    <div class="summary-title">RIESGO NARRATIVO</div>
+                    <div class="summary-value">0%</div>
+                    <div class="summary-subtext">Evaluación estructural</div>
+                </div>
+            `;
+            
+            // Restablecer puntuaciones
+            objectivityScore.textContent = "0%";
+            riskScore.textContent = "0%";
+            credibilityScore.textContent = "0%";
+            objectivityBar.style.width = "0%";
+            riskBar.style.width = "0%";
+            credibilityBar.style.width = "0%";
+            
+            // Restablecer badges
+            fallaciesBadge.textContent = "0";
+            propagandaBadge.textContent = "0";
+            biasesBadge.textContent = "0";
+            emotionalBadge.textContent = "0";
+            
+            // Restablecer pestañas
+            tabContents.forEach(tab => {
+                if (tab.id === 'tab-all') {
+                    tab.innerHTML = '<div class="empty-state">Ejecuta el análisis para ver los problemas detectados</div>';
+                } else {
+                    const tabId = tab.id.replace('tab-', '');
+                    const emptyText = {
+                        fallacies: 'No se han detectado falacias lógicas',
+                        propaganda: 'No se han detectado técnicas de propaganda',
+                        biases: 'No se han detectado sesgos cognitivos',
+                        emotional: 'No se ha detectado lenguaje emocional excesivo'
+                    }[tabId] || 'No hay problemas detectados';
+                    tab.innerHTML = `<div class="empty-state">${emptyText}</div>`;
+                }
+            });
+            
+            // Restablecer explicaciones
+            explanationsPanel.innerHTML = `
+                <div class="explanation-placeholder">
+                    <div class="icon">💡</div>
+                    <h3>Selecciona un problema</h3>
+                    <p>Haz clic en cualquier problema de la lista para ver su explicación detallada.</p>
+                </div>
+            `;
+            
+            // Asegurarse de que la pestaña "all" esté activa
+            switchTab('all');
+            
+            currentAnalysis = null;
+            currentSelectedIssue = null;
+        }
+        
+        // Event Listeners
+        analyzeBtn.addEventListener('click', runAnalysis);
+        clearBtn.addEventListener('click', clearText);
+        
+        // Permitir usar Ctrl+Enter para ejecutar el análisis
+        textInput.addEventListener('keydown', (e) => {
+            if (e.ctrlKey && e.key === 'Enter') {
+                runAnalysis();
+            }
+        });
+        
+        // Event listeners para pestañas
+        problemsTabs.addEventListener('click', (e) => {
+            if (e.target.classList.contains('tab')) {
+                const tabName = e.target.getAttribute('data-tab');
+                switchTab(tabName);
+            }
+        });
+        
+        // Ejecutar análisis inicial con texto de ejemplo
+        setTimeout(() => {
+            runAnalysis();
+        }, 500);
+    </script>
+</body>
+</html>
