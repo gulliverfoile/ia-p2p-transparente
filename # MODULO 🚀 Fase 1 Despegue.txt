@@ -1,0 +1,38 @@
+# MODULO: 🚀 Fase 1: Despegue
+# LECCION: El Límite del Motor
+
+Bienvenido a la prueba de estrés. Aquí probamos si el motor soporta imágenes de gran tamaño y listas anidadas.
+
+* Elemento 1
+    * Sub-elemento A
+    * Sub-elemento B
+* Elemento 2
+
+IMAGEN: https://images.unsplash.com/photo-1451187580459-43490279c0fa?w=1200
+
+# MODULO: ⚙️ Fase 2: Interactividad
+# LECCION: El Laboratorio JS
+
+Este plugin genera una bola que rebota. Si el motor es fluido, la animación no debería dar tirones al cambiar de lección.
+
+PLUGIN:
+const app = document.getElementById('app');
+app.innerHTML = '<canvas id="c" width="400" height="200" style="background:#000; display:block; margin:auto;"></canvas>';
+const ctx = document.getElementById('c').getContext('2d');
+let x = 200, y = 100, dx = 2, dy = 2;
+function draw() {
+    ctx.clearRect(0,0,400,200);
+    ctx.fillStyle = '#3b82f6';
+    ctx.beginPath(); ctx.arc(x,y,10,0,Math.PI*2); ctx.fill();
+    if(x+dx > 390 || x+dx < 10) dx = -dx;
+    if(y+dy > 190 || y+dy < 10) dy = -dy;
+    x+=dx; y+=dy;
+    requestAnimationFrame(draw);
+}
+draw();
+
+# LECCION: Test de Navegación Final
+
+Si puedes leer esto después de ver la bola rebotar, el motor ha pasado la prueba de estabilidad de memoria.
+
+IMAGEN: https://images.unsplash.com/photo-1550751827-4bd374c3f58b?w=800

@@ -1,0 +1,255 @@
+modulos:
+  - nombre: "Laboratorio Tor"
+    lecciones:
+      - titulo: "Simulador de circuitos Tor"
+        contenido: |
+          # 🌐 Simulador interactivo de la red Tor
+
+          Este laboratorio te permite experimentar con los conceptos básicos de Tor:
+          - **Nodos de entrada** (Guard): el primer salto, conoce tu IP real.
+          - **Nodos intermedios** (Middle): el segundo salto, solo conocen al anterior y siguiente.
+          - **Nodos de salida** (Exit): el último salto, se conecta al destino final.
+
+          Puedes ajustar el número de nodos y elegir el país de salida para ver cómo cambia el circuito.
+
+        plugin: |
+          // ============================================
+          // PLUGIN: SIMULADOR DE CIRCUITOS TOR
+          // ============================================
+          const app = document.getElementById('app');
+          
+          // Estilos
+          const style = document.createElement('style');
+          style.textContent = `
+            .tor-lab {
+              background: #1e293b;
+              color: #e2e8f0;
+              padding: 25px;
+              border-radius: 16px;
+              font-family: 'Inter', sans-serif;
+            }
+            .controls {
+              display: flex;
+              gap: 20px;
+              margin-bottom: 20px;
+              flex-wrap: wrap;
+            }
+            .control-group {
+              flex: 1;
+              min-width: 150px;
+            }
+            .control-group label {
+              display: block;
+              margin-bottom: 5px;
+              color: #94a3b8;
+            }
+            select, input {
+              width: 100%;
+              padding: 8px;
+              border-radius: 8px;
+              background: #0f172a;
+              color: white;
+              border: 1px solid #475569;
+            }
+            .circuit {
+              background: #0f172a;
+              border-radius: 12px;
+              padding: 20px;
+              margin: 20px 0;
+              position: relative;
+            }
+            .nodes {
+              display: flex;
+              justify-content: space-around;
+              align-items: center;
+              flex-wrap: wrap;
+              gap: 10px;
+            }
+            .node {
+              background: #334155;
+              border-radius: 12px;
+              padding: 15px;
+              text-align: center;
+              min-width: 120px;
+              border: 2px solid #475569;
+            }
+            .node.guard { border-color: #3b82f6; }
+            .node.middle { border-color: #f59e0b; }
+            .node.exit { border-color: #10b981; }
+            .node .type {
+              font-size: 0.8rem;
+              color: #94a3b8;
+              margin-bottom: 5px;
+            }
+            .node .ip {
+              font-family: monospace;
+              font-size: 1.1rem;
+              font-weight: bold;
+            }
+            .node .country {
+              font-size: 0.8rem;
+              background: #1e293b;
+              padding: 2px 8px;
+              border-radius: 12px;
+              display: inline-block;
+              margin-top: 5px;
+            }
+            .arrow {
+              color: #475569;
+              font-size: 2rem;
+            }
+            .layers {
+              margin-top: 30px;
+              padding: 15px;
+              background: #0f172a;
+              border-radius: 8px;
+              font-family: monospace;
+            }
+            .layer {
+              padding: 8px;
+              border-left: 3px solid;
+              margin-bottom: 5px;
+            }
+            .layer.guard { border-color: #3b82f6; }
+            .layer.middle { border-color: #f59e0b; }
+            .layer.exit { border-color: #10b981; }
+            .btn {
+              background: #3b82f6;
+              color: white;
+              border: none;
+              padding: 12px 24px;
+              border-radius: 40px;
+              font-weight: 600;
+              cursor: pointer;
+              margin-top: 15px;
+            }
+            .btn:hover {
+              background: #2563eb;
+            }
+          `;
+          app.appendChild(style);
+          
+          // Datos simulados de nodos por país
+          const nodeDB = {
+            'España': {
+              guard: ['185.220.101.1', '185.220.101.5', '185.220.101.9'],
+              middle: ['185.220.102.2', '185.220.102.6', '185.220.102.10'],
+              exit: ['185.220.103.3', '185.220.103.7', '185.220.103.11']
+            },
+            'Alemania': {
+              guard: ['46.182.106.1', '46.182.106.5', '46.182.106.9'],
+              middle: ['46.182.107.2', '46.182.107.6', '46.182.107.10'],
+              exit: ['46.182.108.3', '46.182.108.7', '46.182.108.11']
+            },
+            'Países Bajos': {
+              guard: ['94.142.241.1', '94.142.241.5', '94.142.241.9'],
+              middle: ['94.142.242.2', '94.142.242.6', '94.142.242.10'],
+              exit: ['94.142.243.3', '94.142.243.7', '94.142.243.11']
+            },
+            'Estados Unidos': {
+              guard: ['104.244.74.1', '104.244.74.5', '104.244.74.9'],
+              middle: ['104.244.75.2', '104.244.75.6', '104.244.75.10'],
+              exit: ['104.244.76.3', '104.244.76.7', '104.244.76.11']
+            }
+          };
+          
+          const paises = Object.keys(nodeDB);
+          
+          // Estado
+          let numNodos = 3;  // guard, middle, exit
+          let paisSeleccionado = 'España';
+          let circuito = [];
+          
+          function generarCircuito(pais, numSaltos = 3) {
+            const db = nodeDB[pais];
+            const guard = db.guard[Math.floor(Math.random() * db.guard.length)];
+            const middle = db.middle[Math.floor(Math.random() * db.middle.length)];
+            const exit = db.exit[Math.floor(Math.random() * db.exit.length)];
+            return [
+              { tipo: 'Guard', ip: guard, pais: pais },
+              { tipo: 'Middle', ip: middle, pais: pais },
+              { tipo: 'Exit', ip: exit, pais: pais }
+            ];
+          }
+          
+          circuito = generarCircuito(paisSeleccionado, numNodos);
+          
+          function renderizar() {
+            const html = `
+              <div class="tor-lab">
+                <h3>🔒 Simulador de circuitos Tor</h3>
+                <div class="controls">
+                  <div class="control-group">
+                    <label>País de salida:</label>
+                    <select id="paisSelect">
+                      ${paises.map(p => `<option value="${p}" ${p === paisSeleccionado ? 'selected' : ''}>${p}</option>`).join('')}
+                    </select>
+                  </div>
+                  <div class="control-group">
+                    <label>Nodos en el circuito:</label>
+                    <input type="range" id="numNodosSlider" min="3" max="5" value="${numNodos}" step="1">
+                    <span style="display:block; text-align:center;">${numNodos}</span>
+                  </div>
+                </div>
+                
+                <div class="circuit">
+                  <div class="nodes">
+                    ${circuito.map((nodo, i) => `
+                      <div class="node ${nodo.tipo.toLowerCase()}">
+                        <div class="type">${nodo.tipo}</div>
+                        <div class="ip">${nodo.ip}</div>
+                        <span class="country">${nodo.pais}</span>
+                      </div>
+                      ${i < circuito.length - 1 ? '<div class="arrow">→</div>' : ''}
+                    `).join('')}
+                  </div>
+                </div>
+                
+                <div class="layers">
+                  <h4>🧅 Encriptación por capas (cebolla):</h4>
+                  ${circuito.map((nodo, i) => {
+                    const capas = [];
+                    for (let j = 0; j <= i; j++) capas.push('🔒');
+                    for (let j = i+1; j < circuito.length; j++) capas.push('🔓');
+                    return `
+                      <div class="layer ${nodo.tipo.toLowerCase()}">
+                        <strong>${nodo.tipo}:</strong> ${capas.join(' ')} (descifra la capa ${i+1})
+                      </div>
+                    `;
+                  }).join('')}
+                </div>
+                
+                <button class="btn" id="nuevoCircuitoBtn">🔄 Nuevo circuito</button>
+                <p style="margin-top:15px; font-size:0.9rem; color:#94a3b8;">
+                  Nota: Las IP son simuladas. En la red real, cada nodo es elegido aleatoriamente entre miles.
+                </p>
+              </div>
+            `;
+            
+            app.innerHTML = html;
+            
+            // Eventos
+            document.getElementById('paisSelect').addEventListener('change', (e) => {
+              paisSeleccionado = e.target.value;
+              circuito = generarCircuito(paisSeleccionado, numNodos);
+              renderizar();
+            });
+            
+            document.getElementById('numNodosSlider').addEventListener('input', (e) => {
+              numNodos = parseInt(e.target.value);
+              document.querySelector('#numNodosSlider + span').textContent = numNodos;
+            });
+            
+            document.getElementById('numNodosSlider').addEventListener('change', (e) => {
+              numNodos = parseInt(e.target.value);
+              circuito = generarCircuito(paisSeleccionado, numNodos);
+              renderizar();
+            });
+            
+            document.getElementById('nuevoCircuitoBtn').addEventListener('click', () => {
+              circuito = generarCircuito(paisSeleccionado, numNodos);
+              renderizar();
+            });
+          }
+          
+          renderizar();

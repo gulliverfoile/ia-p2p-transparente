@@ -1,0 +1,54 @@
+# MODULO: 🌐 El DOM y JavaScript
+# LECCION: ¿Qué es el DOM? (Teoría)
+
+El **DOM (Document Object Model)** es la estructura en árbol que el navegador crea al cargar tu HTML. 
+
+### Conceptos Clave:
+* **Nodos**: Cada etiqueta es un nodo.
+* **Eventos**: Acciones como `click` o `input`.
+* **Manipulación**: Usar JS para cambiar el texto o el color.
+
+IMAGEN: https://images.unsplash.com/photo-1517694712202-14dd9538aa97?w=800
+
+# LECCION: Manipulación en Tiempo Real (Video)
+
+Mira cómo se transforman los elementos en este tutorial rápido.
+
+VIDEO: https://www.youtube.com/watch?v=5fb2aPlgoys
+
+# LECCION: Laboratorio Práctico (Ejercicio)
+
+**Reto:** Hemos creado un panel de control. Tu misión es usar los botones para cambiar el estado del sistema. Este plugin mide tu capacidad de gestionar **eventos**.
+
+PLUGIN:
+const app = document.getElementById('app');
+app.innerHTML = `
+    <div style="background:#1e293b; padding:25px; border-radius:15px; border:2px solid #3b82f6; text-align:center;">
+        <h2 style="color:#60a5fa; margin-bottom:15px;">🕹️ Panel de Control</h2>
+        <div id="status" style="background:#ef4444; padding:10px; border-radius:8px; margin-bottom:20px; font-weight:bold;">SISTEMA: APAGADO</div>
+        <button id="on" style="padding:10px 20px; background:#22c55e; border:none; border-radius:5px; color:white; cursor:pointer; font-weight:bold; margin-right:10px;">ENCENDER</button>
+        <button id="off" style="padding:10px 20px; background:#ef4444; border:none; border-radius:5px; color:white; cursor:pointer; font-weight:bold;">APAGAR</button>
+        <p style="margin-top:15px; font-size:0.8em; color:#94a3b8;">Interactúa con los botones para ver el DOM en acción.</p>
+    </div>
+`;
+
+const status = document.getElementById('status');
+document.getElementById('on').onclick = () => {
+    status.innerText = 'SISTEMA: OPERATIVO';
+    status.style.background = '#22c55e';
+    status.style.boxShadow = '0 0 15px #22c55e';
+};
+document.getElementById('off').onclick = () => {
+    status.innerText = 'SISTEMA: APAGADO';
+    status.style.background = '#ef4444';
+    status.style.boxShadow = 'none';
+};
+
+# MODULO: 🏁 Evaluación
+# LECCION: Reflexión Final
+
+Si has podido encender el panel en la lección anterior y ver el video, has dominado el flujo de este motor educativo.
+
+**¿Próximos pasos?**
+1. Intenta crear tu propio archivo `.json` con esta misma estructura.
+2. Añade más lecciones al módulo de "Fase 2".

@@ -1,0 +1,67 @@
+# MODULO: 🏗️ Estructuras
+# LECCION: Hardware vs Software
+
+La base de todo sistema. El hardware es lo que puedes golpear, el software es lo que solo puedes maldecir.
+
+### Componentes:
+1.  **CPU**: El cerebro.
+2.  **RAM**: La memoria a corto plazo.
+3.  **Storage**: Donde vive este motor.
+
+IMAGEN: https://images.unsplash.com/photo-1518770660439-4636190af475?w=800
+
+# MODULO: 👨‍💻 Programación
+# LECCION: El flujo lógico
+
+Los programas no son más que una serie de decisiones (IF/ELSE).
+
+VIDEO: https://www.youtube.com/watch?v=Xpk67YzOn5w
+
+# LECCION: Simulador de Puertas Lógicas
+
+Usa el plugin para entender el operador **AND**. Solo si ambos interruptores están en "1", la bombilla se enciende.
+
+PLUGIN:
+const app = document.getElementById('app');
+app.innerHTML = `
+    <div style="text-align:center; padding:30px; background:#0f172a; color:white; border-radius:15px;">
+        <h3>🔌 Simulador Compuerta AND</h3>
+        <button id="a" style="padding:10px; background:red;">A: 0</button>
+        <span style="font-size:20px; margin:0 15px;">+</span>
+        <button id="b" style="padding:10px; background:red;">B: 0</button>
+        <div id="light" style="width:50px; height:50px; background:#333; border-radius:50%; margin:20px auto; border:3px solid #555;"></div>
+        <p id="msg">La luz está apagada</p>
+    </div>
+`;
+let state = {a:0, b:0};
+const check = () => {
+    const light = document.getElementById('light');
+    if(state.a && state.b) {
+        light.style.background = 'yellow';
+        light.style.boxShadow = '0 0 20px yellow';
+        document.getElementById('msg').innerText = '¡LUZ ENCENDIDA!';
+    } else {
+        light.style.background = '#333';
+        document.getElementById('msg').innerText = 'Falta energía...';
+    }
+};
+document.getElementById('a').onclick = (e) => { 
+    state.a = state.a ? 0 : 1; 
+    e.target.innerText = 'A: ' + state.a;
+    e.target.style.background = state.a ? 'green' : 'red';
+    check();
+};
+document.getElementById('b').onclick = (e) => { 
+    state.b = state.b ? 0 : 1; 
+    e.target.innerText = 'B: ' + state.b;
+    e.target.style.background = state.b ? 'green' : 'red';
+    check();
+};
+
+# MODULO: 🏁 Finalización
+# LECCION: Reflexión Final
+
+Si estás viendo esto, la navegación por módulos funciona perfectamente. 
+Has aprendido sobre hardware, has visto un video de lógica y has operado una compuerta AND.
+
+¡Felicidades, has completado el curso!

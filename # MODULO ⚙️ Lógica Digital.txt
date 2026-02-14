@@ -1,0 +1,24 @@
+# MODULO: ⚙️ Lógica Digital
+# LECCION: La Puerta AND
+
+Teoría rápida: Una puerta AND solo da salida positiva si **ambas** entradas son verdaderas.
+
+IMAGEN: https://images.unsplash.com/photo-1518770660439-4636190af475?w=800
+VIDEO: https://www.youtube.com/watch?v=dQw4w9WgXcQ
+
+PLUGIN:
+const app = document.getElementById('app');
+app.innerHTML = '<div style="text-align:center;"><h3>🔌 Simulador v5.7</h3><button id="A" style="padding:10px;background:red;color:white">A: 0</button> <button id="B" style="padding:10px;background:red;color:white">B: 0</button><div id="L" style="width:40px;height:40px;background:#333;border-radius:50%;margin:15px auto;"></div></div>';
+let s = {a:0, b:0};
+const up = () => {
+  const led = document.getElementById('L');
+  if(s.a && s.b) { led.style.background = 'yellow'; led.style.boxShadow = '0 0 15px yellow'; }
+  else { led.style.background = '#333'; led.style.boxShadow = 'none'; }
+};
+document.getElementById('A').onclick = (e) => { s.a = s.a ? 0 : 1; e.target.innerText = 'A: ' + s.a; e.target.style.background = s.a ? 'green' : 'red'; up(); };
+document.getElementById('B').onclick = (e) => { s.b = s.b ? 0 : 1; e.target.innerText = 'B: ' + s.b; e.target.style.background = s.b ? 'green' : 'red'; up(); };
+
+# MODULO: 🏁 Fin
+# LECCION: Reflexión Final
+
+Si ves esto después de jugar con la bombilla, el motor es oficialmente 100% estable.

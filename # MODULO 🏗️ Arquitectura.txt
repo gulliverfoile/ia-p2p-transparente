@@ -1,0 +1,50 @@
+# MODULO: 🏗️ Arquitectura
+# LECCION: Compuertas Lógicas
+
+Las compuertas son la base de los procesadores.
+
+PLUGIN:
+const app = document.getElementById('app');
+app.innerHTML = `
+    <div style="text-align:center; background:#1e293b; padding:20px; border-radius:10px; border:2px solid #3b82f6;">
+        <h3>🔌 Simulador AND (Corregido)</h3>
+        <button id="btnA" style="padding:10px 20px; background:#ef4444; color:white; border:none; border-radius:5px; cursor:pointer;">A: 0</button>
+        <span style="font-size:24px; margin:0 10px;">+</span>
+        <button id="btnB" style="padding:10px 20px; background:#ef4444; color:white; border:none; border-radius:5px; cursor:pointer;">B: 0</button>
+        <div id="led" style="width:60px; height:60px; background:#333; border-radius:50%; margin:20px auto; border:4px solid #555; transition: 0.3s;"></div>
+        <p id="info" style="color:#94a3b8;">La compuerta AND requiere que ambos sean 1.</p>
+    </div>
+`;
+
+let a = 0, b = 0;
+const update = () => {
+    const led = document.getElementById('led');
+    if(a && b) {
+        led.style.background = '#facc15';
+        led.style.boxShadow = '0 0 30px #facc15';
+        document.getElementById('info').innerText = '¡EXITO: Corriente fluyendo!';
+    } else {
+        led.style.background = '#333';
+        led.style.boxShadow = 'none';
+        document.getElementById('info').innerText = 'Falta energía en una entrada...';
+    }
+};
+
+document.getElementById('btnA').onclick = (e) => {
+    a = a ? 0 : 1;
+    e.target.innerText = 'A: ' + a;
+    e.target.style.background = a ? '#22c55e' : '#ef4444';
+    update();
+};
+
+document.getElementById('btnB').onclick = (e) => {
+    b = b ? 0 : 1;
+    e.target.innerText = 'B: ' + b;
+    e.target.style.background = b ? '#22c55e' : '#ef4444';
+    update();
+};
+
+# MODULO: 🏁 Final
+# LECCION: Conclusión
+
+Si has encendido la bombilla amarilla, has entendido la lógica binaria. El motor ha guardado tu posición. Si cierras el navegador y vuelves, estarás justo aquí.

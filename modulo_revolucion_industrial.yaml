@@ -1,0 +1,350 @@
+modulos:
+  - nombre: "🏭 Revolución Industrial"
+    lecciones:
+      - titulo: "Introducción: El mundo antes de la máquina"
+        contenido: |
+          # 🌾 El mundo preindustrial
+
+          Antes del siglo XVIII, la economía era **agraria y artesanal**. La mayoría de la gente vivía en el campo y producía lo que consumía. El trabajo era manual, con herramientas sencillas y ritmos marcados por la luz solar y las estaciones.
+
+          ## La energía disponible
+          - Humana y animal
+          - Viento (molinos)
+          - Agua (molinos hidráulicos)
+          - Leña (calefacción, cocina)
+
+          ## La producción
+          - Talleres artesanales (gremios)
+          - Producción doméstica (putting-out system)
+          - Comercio local y de larga distancia limitado
+
+          Todo cambió cuando se logró dominar una nueva fuente de energía: **el vapor**.
+        imagen: "https://images.unsplash.com/photo-1589652717521-10c0d092dea9?w=800"
+
+      - titulo: "⚙️ La máquina de vapor"
+        contenido: |
+          # James Watt y la máquina de vapor
+
+          En 1769, James Watt patentó una máquina de vapor con condensador separado, mucho más eficiente que las anteriores. Esto permitió usar el vapor para mover **máquinas en fábricas**, **locomotoras** y **barcos**.
+
+          ## Principio básico
+          El vapor de agua a presión empuja un pistón, que transforma energía térmica en movimiento mecánico.
+
+          ## Impacto
+          - Las fábricas ya no necesitaban estar cerca de ríos (energía hidráulica).
+          - Se podía trabajar día y noche.
+          - Nacen las **ciudades industriales** alrededor de las fábricas.
+
+          ![Esquema máquina de vapor](https://upload.wikimedia.org/wikipedia/commons/thumb/4/4c/Steam_engine_in_action.gif/300px-Steam_engine_in_action.gif)
+        video: "https://www.youtube.com/watch?v=GJtJlJN6xCc"
+
+      - titulo: "💰 Transformaciones económicas"
+        contenido: |
+          # Capitalismo industrial
+
+          La máquina de vapor impulsó el **capitalismo industrial**:
+
+          - **Inversión en maquinaria**: se necesitan grandes capitales.
+          - **Fábricas**: concentración de trabajadores en un mismo lugar.
+          - **Producción en serie**: bienes más baratos y abundantes.
+          - **Nuevos sectores**: textil, siderurgia, minería, ferrocarriles.
+
+          ## Consecuencias
+          - Auge de la burguesía industrial.
+          - Crecimiento de las ciudades (éxodo rural).
+          - Nuevas teorías económicas (Adam Smith, liberalismo).
+        imagen: "https://images.unsplash.com/photo-1581091226033-d5c48150dbaa?w=800"
+
+      - titulo: "🚂 Nuevas tecnologías"
+        contenido: |
+          # La revolución de los transportes y la comunicación
+
+          - **Ferrocarril** (Stephenson, 1825): reduce drásticamente los tiempos de viaje y el coste del transporte de mercancías.
+          - **Barco de vapor** (Fulton, 1807): navegación más rápida y fiable.
+          - **Telar mecánico** (Cartwright, 1785): multiplica la producción textil.
+          - **Máquina de hilar** (Arkwright, 1769): hilo más resistente y barato.
+
+          Estas innovaciones se retroalimentaban: el ferrocarril llevaba carbón a las fábricas y las fábricas producían raíles para el ferrocarril.
+        video: "https://www.youtube.com/watch?v=8iU8LPEa4oA"
+
+      - titulo: "👥 Problemas sociales"
+        contenido: |
+          # La cara oscura de la industrialización
+
+          El rápido crecimiento trajo graves problemas:
+
+          ## Condiciones laborales
+          - Jornadas de 14-16 horas.
+          - Salarios de miseria.
+          - Trabajo infantil (niños de 6 años en minas).
+          - Falta de seguridad: accidentes frecuentes.
+
+          ## Urbanización
+          - Ciudades hacinadas, sin alcantarillado.
+          - Epidemias (cólera, tifus).
+          - Viviendas insalubres (conventillos).
+
+          ## Contaminación
+          - Humo de las fábricas cubría las ciudades.
+          - Ríos contaminados por vertidos industriales.
+
+          > "Esta ciudad es una mezcla de riqueza y miseria, de chimeneas y tugurios." – Descripción de Manchester (1840)
+        imagen: "https://images.unsplash.com/photo-1590845947676-f0d7b0f7d5f8?w=800"
+
+      - titulo: "🤝 Movimientos sociales y reformas"
+        contenido: |
+          # La respuesta obrera
+
+          Ante las duras condiciones, los trabajadores comenzaron a organizarse:
+
+          - **Ludismo** (1811-1816): destrucción de máquinas (se creía que causaban el paro).
+          - **Sindicalismo**: primeras trade unions (legalizadas en 1824 en Inglaterra).
+          - **Cartismo** (1838-1848): movimiento político que exigía sufragio universal masculino y mejoras laborales.
+          - **Socialismo utópico** (Owen, Fourier): propuestas de comunidades ideales.
+          - **Marxismo** (1848): análisis científico del capitalismo y llamada a la revolución.
+
+          ## Reformas logradas
+          - Ley de fábricas (1833): limita horas de trabajo infantil.
+          - Ley de minas (1842): prohíbe trabajo subterráneo a mujeres y niños.
+          - Jornada de 10 horas (1847).
+        video: "https://www.youtube.com/watch?v=ftF8nU3pQ7U"
+
+      - titulo: "🎮 Simulador: Gestiona tu fábrica"
+        contenido: |
+          # 🏭 Simulador de fábrica victoriana
+
+          Ajusta los parámetros y observa cómo afectan a la producción, los beneficios y la felicidad de los obreros. Intenta encontrar un equilibrio sostenible.
+        plugin: |
+          // ============================================
+          // PLUGIN: SIMULADOR DE FÁBRICA (REVOLUCIÓN INDUSTRIAL)
+          // ============================================
+          const app = document.getElementById('app');
+          
+          // Estilos
+          const style = document.createElement('style');
+          style.textContent = `
+            .factory-sim {
+              background: #1e293b;
+              color: #e2e8f0;
+              padding: 25px;
+              border-radius: 16px;
+              font-family: 'Inter', sans-serif;
+            }
+            .stats {
+              display: grid;
+              grid-template-columns: repeat(3, 1fr);
+              gap: 15px;
+              margin: 20px 0;
+            }
+            .stat-card {
+              background: #0f172a;
+              border-radius: 12px;
+              padding: 15px;
+              text-align: center;
+              border-left: 4px solid #3b82f6;
+            }
+            .stat-label {
+              font-size: 0.9rem;
+              color: #94a3b8;
+              margin-bottom: 5px;
+            }
+            .stat-value {
+              font-size: 1.8rem;
+              font-weight: bold;
+            }
+            .stat-value.good { color: #10b981; }
+            .stat-value.bad { color: #ef4444; }
+            .stat-value.warning { color: #f59e0b; }
+            .sliders {
+              margin: 20px 0;
+            }
+            .slider-group {
+              margin-bottom: 20px;
+            }
+            .slider-group label {
+              display: flex;
+              justify-content: space-between;
+              margin-bottom: 5px;
+            }
+            input[type=range] {
+              width: 100%;
+              height: 8px;
+              border-radius: 4px;
+              background: #334155;
+              outline: none;
+            }
+            .btn {
+              background: #3b82f6;
+              color: white;
+              border: none;
+              padding: 12px 24px;
+              border-radius: 40px;
+              font-weight: 600;
+              cursor: pointer;
+              margin-top: 15px;
+            }
+            .btn:hover {
+              background: #2563eb;
+            }
+            .consequences {
+              background: #0f172a;
+              border-radius: 12px;
+              padding: 20px;
+              margin-top: 20px;
+              border-left: 4px solid #f59e0b;
+            }
+            .consequences h4 {
+              color: #f59e0b;
+              margin-bottom: 10px;
+            }
+            .consequences ul {
+              list-style: none;
+              padding: 0;
+            }
+            .consequences li {
+              padding: 5px 0;
+              border-bottom: 1px solid #334155;
+            }
+          `;
+          app.appendChild(style);
+          
+          // Estado inicial
+          let horasJornada = 12;
+          let salarioDiario = 2;  // chelines
+          let nivelMecanizacion = 50;  // 0-100
+          
+          function calcularProduccion() {
+            // Producción base: mecanización * horas * factor
+            return Math.floor(nivelMecanizacion * (horasJornada / 10) * (1 + salarioDiario / 20));
+          }
+          
+          function calcularBeneficio(produccion) {
+            const costeSalarios = salarioDiario * 100;  // 100 trabajadores
+            const costeMantenimiento = nivelMecanizacion * 5;
+            const ingresos = produccion * 0.5;
+            return Math.floor(ingresos - costeSalarios - costeMantenimiento);
+          }
+          
+          function calcularFelicidad() {
+            // Felicidad base 100, se resta por horas largas y salario bajo
+            let felicidad = 100;
+            felicidad -= (horasJornada - 8) * 8;
+            felicidad += (salarioDiario - 2) * 5;
+            felicidad -= (nivelMecanizacion / 2);  // mecanización = desempleo/alienación
+            return Math.max(0, Math.min(100, Math.round(felicidad)));
+          }
+          
+          function obtenerConsecuencias() {
+            const prod = calcularProduccion();
+            const benef = calcularBeneficio(prod);
+            const feliz = calcularFelicidad();
+            const consec = [];
+            
+            if (horasJornada > 14) consec.push("Jornadas inhumanas: riesgo de revuelta ludita.");
+            else if (horasJornada > 12) consec.push("Jornadas muy largas: descontento generalizado.");
+            else if (horasJornada > 10) consec.push("Jornadas largas, pero tolerables.");
+            
+            if (salarioDiario < 1.5) consec.push("Salario de hambre: trabajo infantil necesario para sobrevivir.");
+            else if (salarioDiario < 2.5) consec.push("Salario bajo: los obreros apenas llegan a fin de mes.");
+            else if (salarioDiario > 4) consec.push("Salario alto: los obreros pueden ahorrar y formarse.");
+            
+            if (nivelMecanizacion > 80) consec.push("Alta mecanización: paro masivo, máquinas sustituyen personas.");
+            else if (nivelMecanizacion < 20) consec.push("Baja mecanización: producción artesanal, poco competitiva.");
+            
+            if (benef < 0) consec.push("Pérdidas: la fábrica quebrará si no cambias algo.");
+            else if (benef > 200) consec.push("Beneficios enormes: puedes permitirte reformas sociales.");
+            
+            if (feliz < 30) consec.push("Felicidad pésima: huelga inminente.");
+            else if (feliz < 50) consec.push("Felicidad baja: los obreros protestan.");
+            
+            return consec;
+          }
+          
+          function renderizar() {
+            const prod = calcularProduccion();
+            const benef = calcularBeneficio(prod);
+            const feliz = calcularFelicidad();
+            const consecuencias = obtenerConsecuencias();
+            
+            const html = `
+              <div class="factory-sim">
+                <h3>🏭 Simulador de fábrica (Inglaterra, 1850)</h3>
+                
+                <div class="stats">
+                  <div class="stat-card">
+                    <div class="stat-label">Producción diaria</div>
+                    <div class="stat-value ${prod > 300 ? 'good' : prod > 150 ? 'warning' : 'bad'}">${prod} uds.</div>
+                  </div>
+                  <div class="stat-card">
+                    <div class="stat-label">Beneficio diario</div>
+                    <div class="stat-value ${benef > 0 ? 'good' : 'bad'}">${benef} £</div>
+                  </div>
+                  <div class="stat-card">
+                    <div class="stat-label">Felicidad obrera</div>
+                    <div class="stat-value ${feliz > 70 ? 'good' : feliz > 40 ? 'warning' : 'bad'}">${feliz}%</div>
+                  </div>
+                </div>
+                
+                <div class="sliders">
+                  <div class="slider-group">
+                    <label>
+                      <span>Jornada laboral (horas/día)</span>
+                      <span>${horasJornada} h</span>
+                    </label>
+                    <input type="range" id="horas" min="8" max="16" value="${horasJornada}" step="1">
+                  </div>
+                  <div class="slider-group">
+                    <label>
+                      <span>Salario diario (chelines)</span>
+                      <span>${salarioDiario.toFixed(1)} s</span>
+                    </label>
+                    <input type="range" id="salario" min="1" max="5" value="${salarioDiario}" step="0.1">
+                  </div>
+                  <div class="slider-group">
+                    <label>
+                      <span>Nivel de mecanización (%)</span>
+                      <span>${nivelMecanizacion}%</span>
+                    </label>
+                    <input type="range" id="mecanizacion" min="0" max="100" value="${nivelMecanizacion}" step="1">
+                  </div>
+                </div>
+                
+                <button class="btn" id="reiniciarBtn">🔄 Restaurar valores históricos</button>
+                
+                <div class="consequences">
+                  <h4>⚖️ Consecuencias sociales</h4>
+                  <ul>
+                    ${consecuencias.length ? consecuencias.map(c => `<li>🔸 ${c}</li>`).join('') : '<li>✅ Situación estable (por ahora).</li>'}
+                  </ul>
+                </div>
+                
+                <p style="font-size:0.8rem; color:#64748b; margin-top:15px;">
+                  Inspirado en datos históricos: 12-14h, salario 2-3 chelines, alta mortalidad infantil.
+                </p>
+              </div>
+            `;
+            
+            app.innerHTML = html;
+            
+            // Event listeners
+            document.getElementById('horas').addEventListener('input', (e) => {
+              horasJornada = parseInt(e.target.value);
+              renderizar();
+            });
+            document.getElementById('salario').addEventListener('input', (e) => {
+              salarioDiario = parseFloat(e.target.value);
+              renderizar();
+            });
+            document.getElementById('mecanizacion').addEventListener('input', (e) => {
+              nivelMecanizacion = parseInt(e.target.value);
+              renderizar();
+            });
+            document.getElementById('reiniciarBtn').addEventListener('click', () => {
+              horasJornada = 12;
+              salarioDiario = 2;
+              nivelMecanizacion = 50;
+              renderizar();
+            });
+          }
+          
+          renderizar();
