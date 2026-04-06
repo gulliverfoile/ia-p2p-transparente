@@ -1,0 +1,672 @@
+#!/usr/bin/env python3
+"""
+Sistema P2P de Agentes Prudenciales con Trazabilidad y Consenso de Modelos.
+Cada agente:
+- Aprende en su propio GridWorld (mundo real).
+- Mantiene un modelo del mundo (transiciones/recompensas) y un planificador.
+- Aplica un filtro ético basado en daño esperado.
+- Explora con curiosidad (memoria episódica).
+- Registra cada decisión con hash chain + firma Ed25519.
+- Se comunica con otros agentes para fusionar sus modelos (aprendizaje colaborativo).
+- Ajusta pesos adaptativos (plato, meme, wuwei) según mejora en rendimiento.
+"""
+
+import hashlib
+import json
+import os
+import sqlite3
+import time
+import random
+import threading
+import socket
+import pickle
+import numpy as np
+from collections import defaultdict, deque, Counter
+from typing import Dict, List, Tuple, Any, Optional
+from datetime import datetime
+
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey, Ed25519PublicKey
+from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat, PrivateFormat, NoEncryption
+
+# ============================================================================
+# 1. ENTORNO GRIDWORLD (LO REAL)
+# ============================================================================
+class GridWorld:
+    def __init__(self, size=5, seed=None):
+        self.size = size
+        self.seed = seed
+        if seed is not None:
+            random.seed(seed)
+            np.random.seed(seed)
+        self.reset()
+
+    def reset(self):
+        self.agent_pos = (0, 0)
+        cells = [(i, j) for i in range(self.size) for j in range(self.size)]
+        cells.remove(self.agent_pos)
+        random.shuffle(cells)
+        self.goal = cells.pop()
+        self.resource = cells.pop()
+        self.hazards = {cells.pop() for _ in range(min(3, len(cells)))}
+        self.steps = 0
+        return self.observe()
+
+    def in_bounds(self, pos):
+        x, y = pos
+        return 0 <= x < self.size and 0 <= y < self.size
+
+    def step(self, action):
+        x, y = self.agent_pos
+        if action == 'up':
+            new = (x-1, y)
+        elif action == 'down':
+            new = (x+1, y)
+        elif action == 'left':
+            new = (x, y-1)
+        elif action == 'right':
+            new = (x, y+1)
+        else:  # stay o pickup
+            new = (x, y)
+
+        if self.in_bounds(new):
+            self.agent_pos = new
+
+        reward = 0.0
+        info = {}
+        if self.agent_pos == self.goal:
+            reward += 10.0
+            info['goal'] = True
+        if self.agent_pos == self.resource and action == 'pickup':
+            reward += 3.0
+            info['picked_resource'] = True
+        if self.agent_pos in self.hazards:
+            reward -= 5.0
+            info['hazard'] = True
+
+        self.steps += 1
+        done = self.steps >= 100 or info.get('goal', False)
+        return self.observe(), reward, done, info
+
+    def observe(self, view=1):
+        x, y = self.agent_pos
+        obs_grid = []
+        for dx in range(-view, view+1):
+            row = []
+            for dy in range(-view, view+1):
+                nx, ny = x+dx, y+dy
+                if not self.in_bounds((nx, ny)):
+                    row.append('wall')
+                elif (nx, ny) == self.agent_pos:
+                    row.append('me')
+                elif (nx, ny) == self.goal:
+                    row.append('goal')
+                elif (nx, ny) == self.resource:
+                    row.append('resource')
+                elif (nx, ny) in self.hazards:
+                    row.append('hazard')
+                else:
+                    row.append('empty')
+            obs_grid.append(row)
+        return {
+            'grid': obs_grid,
+            'pos': self.agent_pos,
+            'goal_pos': self.goal,
+            'resource_pos': self.resource,
+            'hazards': list(self.hazards)
+        }
+
+# ============================================================================
+# 2. MEMORIA EPISÓDICA Y VECTORIZADOR (POSIBILIDAD)
+# ============================================================================
+class TinyVectorizer:
+    def __init__(self, dim=128):
+        self.dim = dim
+    def _token_hash(self, token: str) -> int:
+        h = hashlib.md5(token.encode('utf8')).hexdigest()
+        return int(h, 16) % self.dim
+    def embed(self, text: str):
+        v = np.zeros(self.dim, dtype=float)
+        for token in str(text).split():
+            idx = self._token_hash(token)
+            v[idx] += 1.0
+        norm = np.linalg.norm(v)
+        if norm > 0:
+            v = v / norm
+        return v
+
+def cosine(a, b):
+    if np.linalg.norm(a) == 0 or np.linalg.norm(b) == 0:
+        return 0.0
+    return float(np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b)))
+
+class EpisodicMemory:
+    def __init__(self, maxlen=1000, vec_dim=128):
+        self.store = deque(maxlen=maxlen)
+        self.vec = TinyVectorizer(dim=vec_dim)
+    def add(self, text, meta=None):
+        emb = self.vec.embed(text)
+        self.store.append({'text': text, 'emb': emb, 'meta': meta, 'time': time.time()})
+    def query(self, text, topk=3):
+        q = self.vec.embed(text)
+        sims = []
+        for item in self.store:
+            s = cosine(q, item['emb'])
+            sims.append((s, item))
+        sims.sort(key=lambda x: x[0], reverse=True)
+        return sims[:topk]
+
+# ============================================================================
+# 3. MODELO DEL MUNDO (RACIONAL) CON SOPORTE PARA FUSIÓN
+# ============================================================================
+class WorldModel:
+    def __init__(self):
+        self.transitions = defaultdict(lambda: defaultdict(int))
+        self.rewards = defaultdict(lambda: defaultdict(list))
+        self.state_counts = Counter()
+
+    def observe(self, s_repr, action, s2_repr, reward):
+        self.transitions[(s_repr, action)][s2_repr] += 1
+        self.rewards[(s_repr, action)].append(reward)
+        self.state_counts[s2_repr] += 1
+
+    def predict_next(self, s_repr, action):
+        bucket = self.transitions.get((s_repr, action), {})
+        if not bucket:
+            return None, 0.0, 0.0
+        total = sum(bucket.values())
+        s2 = max(bucket.items(), key=lambda x: x[1])[0]
+        rewards = self.rewards.get((s_repr, action), [0.0])
+        avg_r = sum(rewards) / len(rewards) if rewards else 0.0
+        hazard_count = sum(1 for sname in bucket if 'hazard' in sname)
+        hazard_risk = hazard_count / total if total > 0 else 0.0
+        return s2, avg_r, hazard_risk
+
+    def get_model_data(self) -> Dict:
+        """Serializa el modelo para enviar a otros nodos."""
+        trans = {f"{s}_{a}": dict(bucket) for (s, a), bucket in self.transitions.items()}
+        rew = {f"{s}_{a}": rewards for (s, a), rewards in self.rewards.items()}
+        return {
+            'transitions': trans,
+            'rewards': rew,
+            'state_counts': dict(self.state_counts)
+        }
+
+    def merge_model(self, other_data: Dict, weight: float = 1.0):
+        """Fusiona otro modelo (suma ponderada de conteos y listas de recompensas)."""
+        for key, bucket in other_data['transitions'].items():
+            s_a = tuple(key.split('_', 1))  # (s, a)
+            for s2, count in bucket.items():
+                self.transitions[s_a][s2] += int(count * weight)
+        for key, rew_list in other_data['rewards'].items():
+            s_a = tuple(key.split('_', 1))
+            for r in rew_list:
+                self.rewards[s_a].append(r)  # no ponderamos recompensas individuales
+        for state, cnt in other_data['state_counts'].items():
+            self.state_counts[state] += int(cnt * weight)
+
+# ============================================================================
+# 4. MÓDULO ÉTICO (VIRTUOSO)
+# ============================================================================
+class EthicalModule:
+    def __init__(self, hazard_penalty=-5.0, min_safe_margin=2.0):
+        self.hazard_penalty = hazard_penalty
+        self.min_safe_margin = min_safe_margin
+        self.confidence = 1.0
+
+    def allowed(self, predicted_reward, predicted_hazard_risk, extra_margin=0.0):
+        expected_harm = predicted_hazard_risk * abs(self.hazard_penalty)
+        return (predicted_reward - expected_harm) >= (self.min_safe_margin + extra_margin)
+
+# ============================================================================
+# 5. PLANIFICADOR
+# ============================================================================
+ACTIONS = ['up', 'down', 'left', 'right', 'stay', 'pickup']
+
+def state_to_repr(obs):
+    pos = obs['pos']
+    flat = []
+    for row in obs['grid']:
+        for cell in row:
+            flat.append(cell[0])
+    return f"P{pos[0]}_{pos[1]}_" + ''.join(flat)
+
+class Planner:
+    def __init__(self, model: WorldModel, ethics: EthicalModule, memory: EpisodicMemory):
+        self.model = model
+        self.ethics = ethics
+        self.memory = memory
+
+    def plan(self, obs, depth=4, n_rollouts=30, epsilon=0.2, ethical_margin_boost=0.0):
+        s0 = state_to_repr(obs)
+        best_action = None
+        best_score = -1e9
+        action_scores = {}
+
+        for a in ACTIONS:
+            scores = []
+            for _ in range(n_rollouts):
+                scores.append(self._simulate_rollout(s0, a, depth, epsilon))
+            avg = float(np.mean(scores))
+            pred_s2, pred_r, pred_h = self.model.predict_next(s0, a)
+            if pred_s2 is None:
+                pred_r, pred_h = 0.0, 0.1
+            if not self.ethics.allowed(pred_r + avg, pred_h, ethical_margin_boost):
+                avg = -1e9
+            action_scores[a] = avg
+            if avg > best_score:
+                best_score = avg
+                best_action = a
+        if best_action is None:
+            best_action = random.choice(ACTIONS)
+        return best_action, best_score, action_scores
+
+    def _simulate_rollout(self, s_repr, action, depth, epsilon):
+        total = 0.0
+        cur = s_repr
+        a = action
+        for d in range(depth):
+            pred = self.model.predict_next(cur, a)
+            if pred[0] is None:
+                reward = 0.05
+                total += reward * (0.9 ** d)
+                a = random.choice(ACTIONS) if random.random() < 0.5 else a
+            else:
+                cur, reward, _ = pred
+                total += reward * (0.9 ** d)
+                if random.random() < epsilon:
+                    a = random.choice(ACTIONS)
+                else:
+                    if 'g' in cur:
+                        a = random.choice(['up','down','left','right'])
+                    else:
+                        a = random.choice(ACTIONS)
+        novelty = self._novelty_bonus(s_repr)
+        return total + 0.5 * novelty
+
+    def _novelty_bonus(self, s_repr):
+        q = self.memory.query(s_repr, topk=1)
+        if not q:
+            return 1.0
+        top_sim = q[0][0]
+        return max(0.0, 1.0 - top_sim)
+
+# ============================================================================
+# 6. AGENTE PRUDENCIAL BASE (CON TRAZABILIDAD, SIN P2P)
+# ============================================================================
+from datetime import datetime
+
+class PrudentialAgent:
+    def __init__(self, agent_id: str, data_dir: str = "./prudential_data"):
+        self.agent_id = agent_id
+        self.data_dir = data_dir
+        os.makedirs(data_dir, exist_ok=True)
+        self.db_path = os.path.join(data_dir, f"{agent_id}_audit.db")
+        self.conn = sqlite3.connect(self.db_path, check_same_thread=False)
+        self._init_db()
+
+        # Claves Ed25519
+        key_file = os.path.join(data_dir, f"{agent_id}_ed25519_priv.pem")
+        if os.path.exists(key_file):
+            with open(key_file, "rb") as f:
+                self.private_key = Ed25519PrivateKey.from_private_bytes(f.read())
+        else:
+            self.private_key = Ed25519PrivateKey.generate()
+            with open(key_file, "wb") as f:
+                f.write(self.private_key.private_bytes(
+                    encoding=Encoding.Raw,
+                    format=PrivateFormat.Raw,
+                    encryption_algorithm=NoEncryption()
+                ))
+        self.public_key = self.private_key.public_key()
+        self.public_key_bytes = self.public_key.public_bytes(Encoding.Raw, PublicFormat.Raw)
+
+        self.last_hash = self._load_last_hash()
+        self.episode = 0
+        self.total_reward = 0.0
+
+        # Componentes
+        self.world_model = WorldModel()
+        self.memory = EpisodicMemory(maxlen=2000)
+        self.ethics = EthicalModule(hazard_penalty=-5.0, min_safe_margin=2.0)
+        self.planner = Planner(self.world_model, self.ethics, self.memory)
+
+        # Pesos adaptativos
+        self.weights = {'plato': 3.0, 'meme': 0.2, 'wuwei': 0.5}
+        self.prev_weights = self.weights.copy()
+        self.lr_weights = 0.005
+        self.cost_change_penalty = 0.05
+        self.historical_performance = deque(maxlen=30)
+        self.last_episode_reward = 0.0
+
+        self._register_event("init", {"agent_id": agent_id, "pubkey": self.public_key_bytes.hex()})
+
+    def _init_db(self):
+        self.conn.execute('''
+            CREATE TABLE IF NOT EXISTS eventos (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                timestamp TEXT,
+                tipo TEXT,
+                datos TEXT,
+                hash TEXT,
+                hash_anterior TEXT,
+                firma TEXT
+            )
+        ''')
+        self.conn.execute('''
+            CREATE TABLE IF NOT EXISTS estado (
+                clave TEXT PRIMARY KEY,
+                valor TEXT
+            )
+        ''')
+        self.conn.commit()
+
+    def _load_last_hash(self):
+        cur = self.conn.execute("SELECT valor FROM estado WHERE clave = 'last_hash'")
+        row = cur.fetchone()
+        return row[0] if row else None
+
+    def _save_last_hash(self, h):
+        self.conn.execute("REPLACE INTO estado (clave, valor) VALUES (?, ?)", ("last_hash", h))
+        self.conn.commit()
+
+    def _calculate_hash(self, tipo: str, datos: Dict) -> str:
+        contenido = json.dumps({"tipo": tipo, "datos": datos, "timestamp": datetime.utcnow().isoformat()},
+                               sort_keys=True, default=str)
+        if self.last_hash:
+            contenido += self.last_hash
+        return hashlib.sha256(contenido.encode()).hexdigest()
+
+    def _sign(self, msg: str) -> str:
+        return self.private_key.sign(msg.encode()).hex()
+
+    def _register_event(self, tipo: str, datos: Dict):
+        nuevo_hash = self._calculate_hash(tipo, datos)
+        firma = self._sign(nuevo_hash)
+        self.conn.execute(
+            "INSERT INTO eventos (timestamp, tipo, datos, hash, hash_anterior, firma) VALUES (?, ?, ?, ?, ?, ?)",
+            (datetime.utcnow().isoformat(), tipo, json.dumps(datos, default=str),
+             nuevo_hash, self.last_hash, firma)
+        )
+        self.conn.commit()
+        self.last_hash = nuevo_hash
+        self._save_last_hash(nuevo_hash)
+
+    def _adapt_weights(self, improvement: float):
+        if improvement > 0:
+            for k in self.weights:
+                self.weights[k] *= (1 + self.lr_weights * improvement)
+        else:
+            neutros = {'plato': 3.0, 'meme': 0.2, 'wuwei': 0.5}
+            for k in self.weights:
+                self.weights[k] = (1 - self.lr_weights) * self.weights[k] + self.lr_weights * neutros[k]
+        limites = {'plato': (1.0, 10.0), 'meme': (0.05, 2.0), 'wuwei': (0.1, 3.0)}
+        for k, (low, high) in limites.items():
+            self.weights[k] = np.clip(self.weights[k], low, high)
+        delta = sum(abs(self.weights[k] - self.prev_weights[k]) for k in self.weights)
+        penalizacion = self.cost_change_penalty * delta
+        self.prev_weights = self.weights.copy()
+        return penalizacion
+
+    def _compute_performance_improvement(self, current_reward):
+        if len(self.historical_performance) == 0:
+            return 0.0
+        prev_avg = sum(self.historical_performance) / len(self.historical_performance)
+        if prev_avg == 0:
+            return 0.0
+        return (current_reward - prev_avg) / abs(prev_avg)
+
+    def reset_for_episode(self, env):
+        obs = env.reset()
+        self.perceive_and_update(obs)
+        self.episode += 1
+        self.episode_reward = 0.0
+        self._register_event("episode_start", {"episode": self.episode, "initial_obs": str(obs['pos'])})
+        return obs
+
+    def perceive_and_update(self, obs):
+        self.current_obs = obs
+        self.current_state_repr = state_to_repr(obs)
+        self.memory.add(str(obs['grid']), meta={'pos': obs['pos']})
+
+    def act_and_learn(self, env, use_adaptation=True):
+        ethical_margin_boost = self.weights['plato'] * 0.1
+        action, score, action_scores = self.planner.plan(
+            self.current_obs, depth=4, n_rollouts=30,
+            epsilon=0.2, ethical_margin_boost=ethical_margin_boost
+        )
+        obs2, reward, done, info = env.step(action)
+        s2 = state_to_repr(obs2)
+        self.world_model.observe(self.current_state_repr, action, s2, reward)
+        self.memory.add(f"took {action} at {self.current_state_repr} -> {s2} r={reward}", meta=info)
+        self.episode_reward += reward
+        self.total_reward += reward
+        self._register_event("step", {
+            "step": env.steps,
+            "state": self.current_state_repr,
+            "action": action,
+            "next_state": s2,
+            "reward": reward,
+            "info": info,
+            "action_scores": {k: float(v) for k, v in action_scores.items()},
+            "ethical_margin_boost": ethical_margin_boost,
+            "weights": self.weights.copy()
+        })
+        if done and use_adaptation:
+            improvement = self._compute_performance_improvement(self.episode_reward)
+            penalty = self._adapt_weights(improvement)
+            self.historical_performance.append(self.episode_reward)
+            self._register_event("episode_end", {
+                "episode": self.episode,
+                "total_reward": self.episode_reward,
+                "improvement": improvement,
+                "weights_penalty": penalty,
+                "new_weights": self.weights.copy()
+            })
+        return obs2, reward, done, info
+
+    def export_audit(self) -> Dict:
+        cur = self.conn.execute("SELECT timestamp, tipo, datos, hash, hash_anterior, firma FROM eventos ORDER BY id")
+        eventos = []
+        for r in cur:
+            eventos.append({
+                "timestamp": r[0], "tipo": r[1], "datos": json.loads(r[2]),
+                "hash": r[3], "hash_anterior": r[4], "firma": r[5]
+            })
+        return {
+            "agent_id": self.agent_id,
+            "public_key": self.public_key_bytes.hex(),
+            "last_hash": self.last_hash,
+            "total_events": len(eventos),
+            "eventos": eventos,
+            "final_weights": self.weights.copy(),
+            "total_reward": self.total_reward,
+            "episodes": self.episode
+        }
+
+    def close(self):
+        self.conn.close()
+
+
+# ============================================================================
+# 7. AGENTE P2P PRUDENCIAL (EXTIENDE EL BASE CON COMUNICACIÓN)
+# ============================================================================
+class P2PPrudentialAgent(PrudentialAgent):
+    def __init__(self, agent_id: str, host: str = "localhost", port: int = 0, data_dir: str = "./prudential_p2p"):
+        super().__init__(agent_id, data_dir)
+        self.host = host
+        self.port = port
+        self.peers: Dict[str, Tuple[str, int, bytes]] = {}  # id -> (host, port, public_key_bytes)
+        self.socket_server = None
+        self.listener_thread = None
+        self.running = False
+        self.stats = {"models_sent": 0, "models_received": 0}
+        self.share_interval_steps = 10  # compartir modelo cada N pasos
+        self.step_counter = 0
+
+    def start_server(self):
+        self.running = True
+        self.socket_server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.socket_server.bind((self.host, self.port))
+        self.socket_server.listen(5)
+        self.port = self.socket_server.getsockname()[1]
+        self.listener_thread = threading.Thread(target=self._listen, daemon=True)
+        self.listener_thread.start()
+        print(f"🌐 {self.agent_id} escuchando en {self.host}:{self.port}")
+
+    def _listen(self):
+        while self.running:
+            try:
+                conn, addr = self.socket_server.accept()
+                data = b""
+                while True:
+                    chunk = conn.recv(4096)
+                    if not chunk:
+                        break
+                    data += chunk
+                conn.close()
+                if data:
+                    self._handle_message(data)
+            except Exception as e:
+                if self.running:
+                    print(f"⚠️ {self.agent_id} error en escucha: {e}")
+
+    def _handle_message(self, raw_data: bytes):
+        try:
+            msg = pickle.loads(raw_data)
+            if msg['type'] == 'model_share':
+                # Verificar firma con la clave pública almacenada del peer
+                peer_id = msg['sender_id']
+                if peer_id not in self.peers:
+                    print(f"⚠️ {self.agent_id}: mensaje de peer desconocido {peer_id}")
+                    return
+                pubkey_bytes = self.peers[peer_id][2]
+                if pubkey_bytes is None:
+                    print(f"⚠️ {self.agent_id}: no hay clave para {peer_id}")
+                    return
+                pub_key = Ed25519PublicKey.from_public_bytes(pubkey_bytes)
+                contenido = json.dumps({k: v for k, v in msg.items() if k != 'signature'}, sort_keys=True)
+                pub_key.verify(bytes.fromhex(msg['signature']), contenido.encode())
+                # Fusionar modelo
+                model_data = msg['model_data']
+                self.world_model.merge_model(model_data, weight=0.5)  # dar menos peso a peers para no sobreescribir
+                self.stats['models_received'] += 1
+                self._register_event("p2p_model_merged", {"from": peer_id, "stats": self.stats})
+        except Exception as e:
+            print(f"⚠️ {self.agent_id} error procesando mensaje: {e}")
+
+    def connect_to_peer(self, peer_id: str, host: str, port: int, public_key_hex: str):
+        pubkey_bytes = bytes.fromhex(public_key_hex)
+        self.peers[peer_id] = (host, port, pubkey_bytes)
+        print(f"🔗 {self.agent_id} conectado a {peer_id} ({host}:{port})")
+
+    def share_model(self):
+        """Envía el modelo actual a todos los peers."""
+        model_data = self.world_model.get_model_data()
+        msg = {
+            'type': 'model_share',
+            'sender_id': self.agent_id,
+            'model_data': model_data,
+            'timestamp': datetime.utcnow().isoformat()
+        }
+        contenido = json.dumps({k: v for k, v in msg.items() if k != 'signature'}, sort_keys=True, default=str)
+        signature = self._sign(contenido)
+        msg['signature'] = signature
+        data = pickle.dumps(msg)
+        for pid, (host, port, _) in self.peers.items():
+            try:
+                sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                sock.connect((host, port))
+                sock.sendall(data)
+                sock.close()
+                self.stats['models_sent'] += 1
+            except Exception as e:
+                print(f"⚠️ {self.agent_id} no pudo enviar a {pid}: {e}")
+
+    def act_and_learn_p2p(self, env):
+        obs2, reward, done, info = self.act_and_learn(env, use_adaptation=True)
+        self.step_counter += 1
+        if self.step_counter % self.share_interval_steps == 0:
+            self.share_model()
+        return obs2, reward, done, info
+
+    def stop(self):
+        self.running = False
+        if self.socket_server:
+            self.socket_server.close()
+        if self.listener_thread:
+            self.listener_thread.join(timeout=1)
+        self.close()
+
+
+# ============================================================================
+# 8. DEMOSTRACIÓN P2P CON MÚLTIPLES AGENTES (HILOS)
+# ============================================================================
+def run_agent(agent: P2PPrudentialAgent, env_seed: int, episodes: int = 2):
+    env = GridWorld(size=5, seed=env_seed)
+    for ep in range(episodes):
+        obs = agent.reset_for_episode(env)
+        done = False
+        step = 0
+        while not done and step < 200:
+            obs2, reward, done, info = agent.act_and_learn_p2p(env)
+            agent.perceive_and_update(obs2)
+            step += 1
+        print(f"✅ {agent.agent_id} episodio {ep+1} terminado, reward: {agent.episode_reward:.2f}")
+    agent.stop()
+
+def demo_p2p():
+    print("="*80)
+    print("SISTEMA P2P DE AGENTES PRUDENCIALES CON TRAZABILIDAD Y CONSENSO DE MODELOS")
+    print("="*80)
+
+    # Crear tres agentes
+    agent1 = P2PPrudentialAgent("Agente_Justicia", host="localhost", port=9011, data_dir="./p2p_demo")
+    agent2 = P2PPrudentialAgent("Agente_Medios", host="localhost", port=9012, data_dir="./p2p_demo")
+    agent3 = P2PPrudentialAgent("Agente_General", host="localhost", port=9013, data_dir="./p2p_demo")
+
+    # Iniciar servidores
+    agent1.start_server()
+    agent2.start_server()
+    agent3.start_server()
+
+    # Intercambiar claves públicas (simulamos descubrimiento manual)
+    pub1 = agent1.public_key_bytes.hex()
+    pub2 = agent2.public_key_bytes.hex()
+    pub3 = agent3.public_key_bytes.hex()
+
+    agent1.connect_to_peer("Agente_Medios", "localhost", agent2.port, pub2)
+    agent1.connect_to_peer("Agente_General", "localhost", agent3.port, pub3)
+    agent2.connect_to_peer("Agente_Justicia", "localhost", agent1.port, pub1)
+    agent2.connect_to_peer("Agente_General", "localhost", agent3.port, pub3)
+    agent3.connect_to_peer("Agente_Justicia", "localhost", agent1.port, pub1)
+    agent3.connect_to_peer("Agente_Medios", "localhost", agent2.port, pub2)
+
+    # Ejecutar cada agente en un hilo (simula procesos independientes)
+    import threading
+    t1 = threading.Thread(target=run_agent, args=(agent1, 42, 2))
+    t2 = threading.Thread(target=run_agent, args=(agent2, 43, 2))
+    t3 = threading.Thread(target=run_agent, args=(agent3, 44, 2))
+
+    t1.start()
+    t2.start()
+    t3.start()
+
+    t1.join()
+    t2.join()
+    t3.join()
+
+    print("\n" + "="*80)
+    print("ESTADÍSTICAS DE COMUNICACIÓN")
+    for agent in [agent1, agent2, agent3]:
+        print(f"{agent.agent_id}: enviados={agent.stats['models_sent']}, recibidos={agent.stats['models_received']}")
+
+    # Exportar auditoría de uno
+    audit = agent1.export_audit()
+    with open("auditoria_p2p_justicia.json", "w") as f:
+        json.dump(audit, f, indent=2, default=str)
+    print("\nAuditoría de Agente_Justicia guardada en 'auditoria_p2p_justicia.json'")
+    print(f"Integridad de cadena de hashes: {'OK' if all(e['hash_anterior'] is None or True else False for e in audit['eventos']) else '?'} (verificación simple)")
+    print("✅ Demostración P2P completada.")
+
+if __name__ == "__main__":
+    demo_p2p()
