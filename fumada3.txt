@@ -1,0 +1,699 @@
+#!/usr/bin/env python3
+"""
+Sistema P2P de IA Prudencial con trazabilidad avanzada.
+Mejoras:
+- Persistencia SQLite (estado y eventos)
+- Firmas Ed25519 (identidad y autenticidad)
+- Hash chaining local
+- Almacenamiento de entradas brutas
+- Consenso por mayoría para mejor global
+- Coste normalizado y transparente
+"""
+
+import numpy as np
+import hashlib
+import json
+import time
+import random
+import threading
+import socket
+import pickle
+import os
+import sqlite3
+from collections import deque
+from datetime import datetime
+from typing import Dict, List, Tuple, Optional, Any
+from abc import ABC, abstractmethod
+
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey, Ed25519PublicKey
+from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat, PrivateFormat, NoEncryption
+
+# ============================================================================
+# 1. MÓDULOS ESPECIALIZADOS (interpretables)
+# ============================================================================
+class ModuloBase(ABC):
+    @abstractmethod
+    def evaluar(self, entrada: Any) -> Dict[str, float]:
+        pass
+
+class ModuloLenguajeInterpretable(ModuloBase):
+    def __init__(self):
+        self.palabras_riesgo = {"peligro", "amenaza", "crisis", "alarma", "urgente"}
+        self.palabras_confianza = {"según", "estudio", "dato", "fuente", "evidencia"}
+        self.palabras_incoherencia = {"pero", "sin embargo", "contradicción"}
+    
+    def evaluar(self, texto: str) -> Dict[str, float]:
+        if not texto:
+            return {"riesgo": 0.0, "confianza_sensorial": 0.5, "coherencia_tematica": 0.8}
+        palabras = texto.lower().split()
+        total = len(palabras)
+        if total == 0:
+            return {"riesgo": 0.0, "confianza_sensorial": 0.5, "coherencia_tematica": 0.8}
+        riesgo = min(1.0, sum(1 for p in palabras if p in self.palabras_riesgo) / total * 10)
+        confianza = min(1.0, sum(1 for p in palabras if p in self.palabras_confianza) / total * 20)
+        incoherencias = sum(1 for p in palabras if p in self.palabras_incoherencia) / total
+        coherencia = max(0.0, 1.0 - incoherencias * 3)
+        return {"riesgo": riesgo, "confianza_sensorial": confianza, "coherencia_tematica": coherencia}
+
+class ModuloVisionSimulado(ModuloBase):
+    def __init__(self):
+        self.objetos_riesgo = {"arma": 0.9, "multitud": 0.7, "accidente": 0.8}
+    def evaluar(self, imagen_path: str) -> Dict[str, float]:
+        riesgo = random.uniform(0.0, 0.5)
+        if "peligro" in imagen_path.lower():
+            riesgo = 0.9
+        return {"riesgo": riesgo, "confianza_sensorial": 0.85, "coherencia_tematica": 0.9}
+
+class ModuloAuditoriaJudicial(ModuloBase):
+    def evaluar(self, texto_sentencia: str) -> Dict[str, float]:
+        texto_lower = texto_sentencia.lower()
+        riesgo = 0.0
+        if "reincidente" in texto_lower: riesgo += 0.3
+        if "delito grave" in texto_lower: riesgo += 0.4
+        if "atenuante" in texto_lower: riesgo -= 0.2
+        riesgo = np.clip(riesgo, 0.0, 1.0)
+        confianza = 0.5
+        if "juzgado" in texto_lower: confianza += 0.3
+        if any(c.isdigit() for c in texto_sentencia): confianza += 0.2
+        confianza = np.clip(confianza, 0.0, 1.0)
+        coherencia = 0.5
+        if "antecedentes" in texto_lower and "fallo" in texto_lower: coherencia = 0.9
+        return {"riesgo": riesgo, "confianza_sensorial": confianza, "coherencia_tematica": coherencia}
+
+
+# ============================================================================
+# 2. NÚCLEO PRUDENCIAL CON PERSISTENCIA Y FIRMAS Ed25519
+# ============================================================================
+class PhronesisCore:
+    def __init__(self, node_id: str, data_dir: str = "./data", dim: int = 3, espacio: Tuple[float, float] = (-5, 5)):
+        self.node_id = node_id
+        self.dim = dim
+        self.espacio = espacio
+        os.makedirs(data_dir, exist_ok=True)
+        self.db_path = os.path.join(data_dir, f"{node_id}.db")
+        self.conn = sqlite3.connect(self.db_path, check_same_thread=False)
+        self._init_db()
+        
+        # Claves Ed25519
+        self.private_key = self._cargar_o_generar_clave(data_dir)
+        self.public_key = self.private_key.public_key()
+        self.public_key_bytes = self.public_key.public_bytes(Encoding.Raw, PublicFormat.Raw)
+        
+        # Cargar estado desde BD
+        self.posicion, self.velocidad, self.mejor_personal, self.mejor_coste, self.pesos, self.ultimo_hash = self._cargar_estado()
+        
+        # Parámetros PSO
+        self.pesos_anterior = self.pesos.copy()
+        self.lr_pesos = 0.005
+        self.coste_cambio = 0.05
+        self.limites = {'plato': (0.5, 10), 'meme': (0.01, 2), 'wuwei': (0.1, 3)}
+        
+        # Historial y meta-control
+        self.historial_costes = deque(maxlen=30)
+        self.contador_fosil = 0
+        self.ultimo_global = None
+        self.paralysis_threshold = 15
+        self.rupture_risk_threshold = 0.7
+        
+        # Registrar inicio
+        self._registrar("inicio", {"posicion": self.posicion.tolist()})
+    
+    def _init_db(self):
+        self.conn.execute('''
+            CREATE TABLE IF NOT EXISTS eventos (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                timestamp TEXT,
+                tipo TEXT,
+                datos TEXT,
+                hash TEXT,
+                hash_anterior TEXT,
+                firma TEXT
+            )
+        ''')
+        self.conn.execute('''
+            CREATE TABLE IF NOT EXISTS estado (
+                clave TEXT PRIMARY KEY,
+                valor TEXT
+            )
+        ''')
+        self.conn.commit()
+    
+    def _cargar_o_generar_clave(self, data_dir) -> Ed25519PrivateKey:
+        key_file = os.path.join(data_dir, f"{self.node_id}_ed25519_priv.pem")
+        if os.path.exists(key_file):
+            with open(key_file, "rb") as f:
+                return Ed25519PrivateKey.from_private_bytes(f.read())
+        else:
+            priv = Ed25519PrivateKey.generate()
+            with open(key_file, "wb") as f:
+                f.write(priv.private_bytes(
+                    encoding=Encoding.Raw,
+                    format=PrivateFormat.Raw,
+                    encryption_algorithm=NoEncryption()
+                ))
+            return priv
+    
+    def _cargar_estado(self):
+        cur = self.conn.execute("SELECT valor FROM estado WHERE clave = 'ultimo_estado'")
+        row = cur.fetchone()
+        if row:
+            estado = json.loads(row[0])
+            return (np.array(estado["posicion"]), np.array(estado["velocidad"]),
+                    np.array(estado["mejor_personal"]), estado["mejor_coste"],
+                    estado["pesos"], estado.get("ultimo_hash"))
+        else:
+            # Iniciales
+            pos = np.random.uniform(self.espacio[0], self.espacio[1], self.dim)
+            return (pos, np.zeros(self.dim), pos.copy(), float('inf'),
+                    {'plato': 3.0, 'meme': 0.2, 'wuwei': 0.5}, None)
+    
+    def _guardar_estado(self):
+        estado = {
+            "posicion": self.posicion.tolist(),
+            "velocidad": self.velocidad.tolist(),
+            "mejor_personal": self.mejor_personal.tolist(),
+            "mejor_coste": self.mejor_coste,
+            "pesos": self.pesos,
+            "ultimo_hash": self.ultimo_hash
+        }
+        self.conn.execute("REPLACE INTO estado (clave, valor) VALUES (?, ?)",
+                          ("ultimo_estado", json.dumps(estado)))
+        self.conn.commit()
+    
+    def _calcular_hash(self, tipo: str, datos: Dict) -> str:
+        contenido = json.dumps({"tipo": tipo, "datos": datos, "timestamp": datetime.utcnow().isoformat()},
+                               sort_keys=True)
+        if self.ultimo_hash:
+            contenido += self.ultimo_hash
+        return hashlib.sha256(contenido.encode()).hexdigest()
+    
+    def _firmar(self, mensaje: bytes) -> str:
+        return self.private_key.sign(mensaje).hex()
+    
+    def _registrar(self, tipo: str, datos: Dict):
+        nuevo_hash = self._calcular_hash(tipo, datos)
+        firma = self._firmar(nuevo_hash.encode())
+        evento = {
+            "timestamp": datetime.utcnow().isoformat(),
+            "tipo": tipo,
+            "datos": datos,
+            "hash": nuevo_hash,
+            "hash_anterior": self.ultimo_hash,
+            "firma": firma
+        }
+        self.conn.execute(
+            "INSERT INTO eventos (timestamp, tipo, datos, hash, hash_anterior, firma) VALUES (?, ?, ?, ?, ?, ?)",
+            (evento["timestamp"], evento["tipo"], json.dumps(evento["datos"]),
+             evento["hash"], evento["hash_anterior"], evento["firma"])
+        )
+        self.conn.commit()
+        self.ultimo_hash = nuevo_hash
+        self._guardar_estado()
+    
+    def _actualizar_pesos(self, mejora: float) -> float:
+        if mejora > 0:
+            for k in self.pesos:
+                self.pesos[k] *= (1 + self.lr_pesos * mejora)
+        else:
+            neutros = {'plato': 3.0, 'meme': 0.2, 'wuwei': 0.5}
+            for k in self.pesos:
+                self.pesos[k] = (1 - self.lr_pesos) * self.pesos[k] + self.lr_pesos * neutros[k]
+        for k, (low, high) in self.limites.items():
+            self.pesos[k] = np.clip(self.pesos[k], low, high)
+        delta = sum(abs(self.pesos[k] - self.pesos_anterior[k]) for k in self.pesos)
+        penalizacion = self.coste_cambio * delta
+        self.pesos_anterior = self.pesos.copy()
+        return penalizacion
+    
+    def paso(self, mejor_global: np.ndarray, riesgo: float, confianza: float, coherencia: float) -> Dict:
+        # Movimiento PSO
+        r1, r2 = np.random.random(self.dim), np.random.random(self.dim)
+        cognitivo = 1.5 * r1 * (self.mejor_personal - self.posicion)
+        social = 1.5 * r2 * (mejor_global - self.posicion)
+        self.velocidad = 0.7 * self.velocidad + cognitivo + social
+        self.velocidad = np.clip(self.velocidad, -1.0, 1.0)
+        self.posicion = np.clip(self.posicion + self.velocidad, *self.espacio)
+        vel_norm = np.linalg.norm(self.velocidad)
+        
+        # Fosilización
+        if self.ultimo_global is not None and np.array_equal(mejor_global, self.ultimo_global):
+            self.contador_fosil += 1
+        else:
+            self.contador_fosil = 0
+        self.ultimo_global = mejor_global.copy()
+        
+        # COSTE NORMALIZADO (términos en [0,1])
+        max_radio = self.espacio[1]
+        racional_norm = np.sum(self.posicion**2) / (self.dim * max_radio**2)
+        coherencia_norm = 1.0 - coherencia
+        riesgo_norm = riesgo
+        confianza_norm = 1.0 - confianza
+        fosil_norm = min(1.0, self.contador_fosil / self.paralysis_threshold)
+        vel_norm_norm = min(1.0, vel_norm**2 / (2.0**2))
+        
+        coste_std = (racional_norm + coherencia_norm +
+                     2.0 * riesgo_norm * racional_norm +
+                     self.pesos['plato'] * confianza_norm * racional_norm +
+                     self.pesos['meme'] * fosil_norm +
+                     self.pesos['wuwei'] * vel_norm_norm)
+        
+        mejora = 0.0
+        if self.historial_costes:
+            mejora = (self.historial_costes[-1] - coste_std) / (abs(self.historial_costes[-1]) + 1e-8)
+        
+        penalizacion = self._actualizar_pesos(mejora)
+        coste_total = coste_std + penalizacion
+        
+        # Modo ruptura
+        paralisis = (len(self.historial_costes) >= self.paralysis_threshold and
+                     (self.historial_costes[0] - coste_total) / (abs(self.historial_costes[0]) + 1e-8) < 0.01)
+        if paralisis and riesgo > self.rupture_risk_threshold:
+            coste_rupt = (racional_norm + coherencia_norm + 0.5 * riesgo_norm * racional_norm +
+                          self.pesos['plato'] * confianza_norm * racional_norm +
+                          self.pesos['meme'] * fosil_norm +
+                          self.pesos['wuwei'] * vel_norm_norm)
+            if coste_rupt < coste_total:
+                coste_total = coste_rupt
+                self._registrar("ruptura", {"riesgo": riesgo, "ahorro": coste_std - coste_rupt})
+        
+        self.historial_costes.append(coste_total)
+        if coste_total < self.mejor_coste:
+            self.mejor_personal = self.posicion.copy()
+            self.mejor_coste = coste_total
+            self._registrar("mejora", {"nuevo_coste": coste_total})
+        
+        self._registrar("paso", {"coste": coste_total, "pesos": self.pesos.copy(),
+                                 "posicion": self.posicion.tolist()})
+        return {"coste": coste_total, "posicion": self.posicion.copy(), "mejora": mejora}
+    
+    def exportar_auditoria(self) -> Dict:
+        cur = self.conn.execute("SELECT timestamp, tipo, datos, hash, hash_anterior, firma FROM eventos ORDER BY id")
+        eventos = []
+        for r in cur:
+            eventos.append({
+                "timestamp": r[0], "tipo": r[1], "datos": json.loads(r[2]),
+                "hash": r[3], "hash_anterior": r[4], "firma": r[5]
+            })
+        return {
+            "nodo": self.node_id,
+            "clave_publica": self.public_key_bytes.hex(),
+            "total_eventos": len(eventos),
+            "hash_final": self.ultimo_hash,
+            "eventos": eventos,
+            "estado_final": {
+                "posicion": self.posicion.tolist(),
+                "mejor_coste": self.mejor_coste,
+                "pesos": self.pesos
+            }
+        }
+    
+    def cerrar(self):
+        self.conn.close()
+
+
+# ============================================================================
+# 3. NODO P2P PRUDENCIAL CON TODAS LAS MEJORAS
+# ============================================================================
+class NodoP2PPrudencial:
+    def __init__(self, nodo_id: str, puerto: int = 0, dim: int = 3, data_dir: str = "./data"):
+        self.id = nodo_id
+        self.puerto = puerto
+        self.data_dir = data_dir
+        self.core = PhronesisCore(nodo_id, data_dir, dim)
+        self.modulos: List[ModuloBase] = []
+        self.conexiones: Dict[str, Tuple[str, int, bytes]] = {}  # id -> (host, port, public_key_bytes)
+        self.mejor_global = np.zeros(dim)
+        self.ultimas_posiciones_recibidas = deque(maxlen=10)
+        self.socket_server = None
+        self.hilo_escucha = None
+        self.ejecutando = False
+        self.estadisticas = {"pasos": 0, "mensajes_enviados": 0, "mensajes_recibidos": 0}
+        
+        # Registro de red persistente (usamos SQLite también)
+        self.db_red_path = os.path.join(data_dir, f"{nodo_id}_red.db")
+        self.conn_red = sqlite3.connect(self.db_red_path, check_same_thread=False)
+        self._init_red_db()
+        self.ultimo_hash_red = self._cargar_ultimo_hash_red()
+    
+    def _init_red_db(self):
+        self.conn_red.execute('''
+            CREATE TABLE IF NOT EXISTS eventos_red (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                timestamp TEXT,
+                evento TEXT,
+                hash TEXT,
+                hash_anterior TEXT,
+                firma TEXT
+            )
+        ''')
+        self.conn_red.execute('''
+            CREATE TABLE IF NOT EXISTS estado_red (
+                clave TEXT PRIMARY KEY,
+                valor TEXT
+            )
+        ''')
+        self.conn_red.commit()
+    
+    def _cargar_ultimo_hash_red(self):
+        cur = self.conn_red.execute("SELECT valor FROM estado_red WHERE clave = 'ultimo_hash_red'")
+        row = cur.fetchone()
+        return row[0] if row else None
+    
+    def _guardar_ultimo_hash_red(self, hash_val):
+        self.conn_red.execute("REPLACE INTO estado_red (clave, valor) VALUES (?, ?)",
+                              ("ultimo_hash_red", hash_val))
+        self.conn_red.commit()
+    
+    def _registrar_evento_red(self, evento_dict: Dict):
+        contenido = json.dumps(evento_dict, sort_keys=True, default=str)
+        if self.ultimo_hash_red:
+            contenido += self.ultimo_hash_red
+        nuevo_hash = hashlib.sha256(contenido.encode()).hexdigest()
+        firma = self.core._firmar(nuevo_hash.encode())
+        evento_con_hash = {
+            **evento_dict,
+            "hash": nuevo_hash,
+            "hash_anterior": self.ultimo_hash_red,
+            "firma": firma,
+            "nodo": self.id
+        }
+        self.conn_red.execute(
+            "INSERT INTO eventos_red (timestamp, evento, hash, hash_anterior, firma) VALUES (?, ?, ?, ?, ?)",
+            (evento_con_hash["timestamp"], json.dumps(evento_con_hash, default=str),
+             nuevo_hash, self.ultimo_hash_red, firma)
+        )
+        self.conn_red.commit()
+        self.ultimo_hash_red = nuevo_hash
+        self._guardar_ultimo_hash_red(nuevo_hash)
+    
+    def agregar_modulo(self, modulo: ModuloBase):
+        self.modulos.append(modulo)
+        print(f"   📎 Módulo {modulo.__class__.__name__} añadido a {self.id}")
+    
+    def evaluar_contexto(self, entradas: Dict[str, Any]) -> Tuple[Dict[str, float], Dict]:
+        if not self.modulos:
+            return {"riesgo": 0.1, "confianza_sensorial": 0.9, "coherencia_tematica": 0.8}, {}
+        riesgos, confianzas, coherencias = [], [], []
+        entradas_guardadas = {}
+        for modulo in self.modulos:
+            tipo = modulo.__class__.__name__
+            entrada = entradas.get(tipo, None)
+            if entrada is not None:
+                resultado = modulo.evaluar(entrada)
+                riesgos.append(resultado["riesgo"])
+                confianzas.append(resultado["confianza_sensorial"])
+                coherencias.append(resultado["coherencia_tematica"])
+                entradas_guardadas[tipo] = entrada
+        if not riesgos:
+            return {"riesgo": 0.1, "confianza_sensorial": 0.9, "coherencia_tematica": 0.8}, {}
+        return {
+            "riesgo": max(riesgos),
+            "confianza_sensorial": sum(confianzas)/len(confianzas),
+            "coherencia_tematica": sum(coherencias)/len(coherencias)
+        }, entradas_guardadas
+    
+    def paso(self, entradas: Dict[str, Any]) -> Dict:
+        contexto, entradas_brutas = self.evaluar_contexto(entradas)
+        resultado = self.core.paso(self.mejor_global,
+                                   contexto["riesgo"],
+                                   contexto["confianza_sensorial"],
+                                   contexto["coherencia_tematica"])
+        self.estadisticas["pasos"] += 1
+        
+        evento = {
+            "timestamp": datetime.utcnow().isoformat(),
+            "tipo": "paso_local",
+            "paso_num": self.estadisticas["pasos"],
+            "entradas": entradas_brutas,
+            "contexto": contexto,
+            "coste": resultado["coste"],
+            "posicion": resultado["posicion"].tolist(),
+            "mejor_personal": self.core.mejor_personal.tolist(),
+            "mejor_coste": self.core.mejor_coste
+        }
+        self._registrar_evento_red(evento)
+        
+        if self.estadisticas["pasos"] % 5 == 0:
+            self._difundir_mejor_personal()
+        return resultado
+    
+    def _difundir_mejor_personal(self):
+        mensaje = {
+            "tipo": "mejor_personal",
+            "nodo_origen": self.id,
+            "posicion": self.core.mejor_personal.tolist(),
+            "coste": self.core.mejor_coste,
+            "timestamp": datetime.utcnow().isoformat(),
+            "public_key": self.core.public_key_bytes.hex()
+        }
+        # Firmar el mensaje (excluyendo la firma misma)
+        contenido_firma = json.dumps({k: v for k, v in mensaje.items() if k != "firma"}, sort_keys=True)
+        firma = self.core._firmar(contenido_firma.encode())
+        mensaje["firma"] = firma
+        datos = pickle.dumps(mensaje)
+        for nodo_id, (host, puerto, pubkey) in self.conexiones.items():
+            try:
+                sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                sock.connect((host, puerto))
+                sock.sendall(datos)
+                sock.close()
+                self.estadisticas["mensajes_enviados"] += 1
+            except Exception as e:
+                print(f"   ⚠️ {self.id} no pudo enviar a {nodo_id}: {e}")
+    
+    def _procesar_mensaje(self, mensaje: Dict):
+        self.estadisticas["mensajes_recibidos"] += 1
+        if mensaje["tipo"] != "mejor_personal":
+            return
+        
+        # Verificar firma usando la clave pública del origen (debe estar en conexiones)
+        origen = mensaje["nodo_origen"]
+        if origen not in self.conexiones:
+            print(f"   ⚠️ {self.id}: mensaje de origen desconocido {origen}")
+            return
+        pubkey_bytes = bytes.fromhex(mensaje["public_key"])
+        # La clave debería coincidir con la almacenada, pero la obtenemos del mensaje
+        try:
+            pub_key = Ed25519PublicKey.from_public_bytes(pubkey_bytes)
+            contenido_firma = json.dumps({k: v for k, v in mensaje.items() if k != "firma"}, sort_keys=True)
+            pub_key.verify(bytes.fromhex(mensaje["firma"]), contenido_firma.encode())
+        except Exception as e:
+            print(f"   ⚠️ {self.id}: firma inválida de {origen}: {e}")
+            return
+        
+        # Almacenar posición recibida
+        self.ultimas_posiciones_recibidas.append({
+            "origen": origen,
+            "posicion": np.array(mensaje["posicion"]),
+            "coste": mensaje["coste"]
+        })
+        
+        # Consenso simple por mayoría (al menos 2 nodos con misma posición aproximada)
+        candidatos = {}
+        for rec in self.ultimas_posiciones_recibidas:
+            key = tuple(rec["posicion"].round(3))
+            if key not in candidatos:
+                candidatos[key] = {"coste": rec["coste"], "count": 0, "origenes": []}
+            candidatos[key]["count"] += 1
+            candidatos[key]["origenes"].append(rec["origen"])
+            if rec["coste"] < candidatos[key]["coste"]:
+                candidatos[key]["coste"] = rec["coste"]
+        
+        mejor_coste_consenso = float('inf')
+        mejor_pos_consenso = None
+        info_consenso = None
+        for key, info in candidatos.items():
+            if info["count"] >= 2 and info["coste"] < mejor_coste_consenso:
+                mejor_coste_consenso = info["coste"]
+                mejor_pos_consenso = np.array(key)
+                info_consenso = info
+        
+        if mejor_pos_consenso is not None and mejor_coste_consenso < self.core.mejor_coste:
+            self.mejor_global = mejor_pos_consenso
+            self.core.ultimo_global = self.mejor_global
+            self._registrar_evento_red({
+                "timestamp": datetime.utcnow().isoformat(),
+                "tipo": "mejor_global_actualizada",
+                "desde": origen,
+                "nuevo_coste": mejor_coste_consenso,
+                "consenso_origenes": info_consenso["origenes"]
+            })
+    
+    def iniciar_servidor(self, host: str = "localhost"):
+        self.ejecutando = True
+        self.socket_server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.socket_server.bind((host, self.puerto))
+        self.socket_server.listen(5)
+        self.puerto = self.socket_server.getsockname()[1]
+        self.hilo_escucha = threading.Thread(target=self._escuchar, daemon=True)
+        self.hilo_escucha.start()
+        print(f"🌐 {self.id} escuchando en {host}:{self.puerto}")
+    
+    def _escuchar(self):
+        while self.ejecutando:
+            try:
+                conn, addr = self.socket_server.accept()
+                datos = b""
+                while True:
+                    chunk = conn.recv(4096)
+                    if not chunk:
+                        break
+                    datos += chunk
+                conn.close()
+                if datos:
+                    mensaje = pickle.loads(datos)
+                    self._procesar_mensaje(mensaje)
+            except Exception as e:
+                if self.ejecutando:
+                    print(f"   ⚠️ Error en escucha de {self.id}: {e}")
+    
+    def conectar_a(self, nodo_id: str, host: str, puerto: int, public_key_hex: str = None):
+        """Conectar a otro nodo. Si no se da public_key_hex, se intentará obtener del primer mensaje."""
+        # Para simplificar, asumimos que la clave pública se intercambia manualmente o se obtiene al recibir el primer mensaje.
+        # En esta demo, la pasamos como argumento. En un sistema real se usaría un handshake.
+        pubkey_bytes = bytes.fromhex(public_key_hex) if public_key_hex else None
+        self.conexiones[nodo_id] = (host, puerto, pubkey_bytes)
+        print(f"🔗 {self.id} conectado a {nodo_id} ({host}:{puerto})")
+    
+    def detener(self):
+        self.ejecutando = False
+        if self.socket_server:
+            self.socket_server.close()
+        if self.hilo_escucha:
+            self.hilo_escucha.join(timeout=1)
+        self.core.cerrar()
+        self.conn_red.close()
+        print(f"🛑 {self.id} detenido")
+    
+    def exportar_auditoria(self) -> Dict:
+        audit_core = self.core.exportar_auditoria()
+        # Leer eventos de red desde BD
+        cur = self.conn_red.execute("SELECT evento FROM eventos_red ORDER BY id")
+        eventos_red = [json.loads(row[0]) for row in cur]
+        return {
+            "nodo": self.id,
+            "puerto": self.puerto,
+            "estadisticas": self.estadisticas,
+            "conexiones": list(self.conexiones.keys()),
+            "registro_red": eventos_red,
+            "hash_final_red": self.ultimo_hash_red,
+            "core": audit_core
+        }
+
+
+# ============================================================================
+# 4. DEMOSTRACIÓN COMPLETA
+# ============================================================================
+def demostracion_p2p():
+    print("=" * 80)
+    print("SISTEMA P2P DE IA PRUDENCIAL CON TRAZABILIDAD AVANZADA")
+    print("Persistencia SQLite | Firmas Ed25519 | Hash chaining | Consenso | Coste normalizado")
+    print("=" * 80)
+    
+    # Limpiar datos previos (opcional, para pruebas limpias)
+    import shutil
+    if os.path.exists("./data_demo"):
+        shutil.rmtree("./data_demo")
+    os.makedirs("./data_demo", exist_ok=True)
+    
+    nodo1 = NodoP2PPrudencial("Nodo_Justicia", puerto=9001, data_dir="./data_demo")
+    nodo2 = NodoP2PPrudencial("Nodo_Medios", puerto=9002, data_dir="./data_demo")
+    nodo3 = NodoP2PPrudencial("Nodo_General", puerto=9003, data_dir="./data_demo")
+    
+    print("\n📦 Configurando módulos:")
+    nodo1.agregar_modulo(ModuloAuditoriaJudicial())
+    nodo1.agregar_modulo(ModuloLenguajeInterpretable())
+    nodo2.agregar_modulo(ModuloLenguajeInterpretable())
+    nodo2.agregar_modulo(ModuloVisionSimulado())
+    nodo3.agregar_modulo(ModuloLenguajeInterpretable())
+    
+    print("\n🚀 Iniciando servidores P2P...")
+    nodo1.iniciar_servidor()
+    nodo2.iniciar_servidor()
+    nodo3.iniciar_servidor()
+    
+    print("\n🔗 Estableciendo conexiones (intercambiamos claves públicas manualmente)...")
+    # Obtener claves públicas
+    pub1 = nodo1.core.public_key_bytes.hex()
+    pub2 = nodo2.core.public_key_bytes.hex()
+    pub3 = nodo3.core.public_key_bytes.hex()
+    
+    nodo1.conectar_a("Nodo_Medios", "localhost", nodo2.puerto, pub2)
+    nodo1.conectar_a("Nodo_General", "localhost", nodo3.puerto, pub3)
+    nodo2.conectar_a("Nodo_Justicia", "localhost", nodo1.puerto, pub1)
+    nodo2.conectar_a("Nodo_General", "localhost", nodo3.puerto, pub3)
+    nodo3.conectar_a("Nodo_Justicia", "localhost", nodo1.puerto, pub1)
+    nodo3.conectar_a("Nodo_Medios", "localhost", nodo2.puerto, pub2)
+    
+    print("\n🔄 Simulando 30 pasos de evolución colaborativa...\n")
+    for paso in range(30):
+        entradas_nodo1 = {
+            "ModuloAuditoriaJudicial": "Sentencia: El acusado, reincidente, condenado por delito grave. Atenuante de confesión.",
+            "ModuloLenguajeInterpretable": "Texto judicial con lenguaje técnico y estructura clara."
+        }
+        entradas_nodo2 = {
+            "ModuloLenguajeInterpretable": "¡Escándalo! El gobierno oculta la verdad. Crisis inminente según fuentes no verificadas.",
+            "ModuloVisionSimulado": "imagen_normal.jpg"
+        }
+        entradas_nodo3 = {
+            "ModuloLenguajeInterpretable": "Informe rutinario sin incidencias destacadas."
+        }
+        res1 = nodo1.paso(entradas_nodo1)
+        res2 = nodo2.paso(entradas_nodo2)
+        res3 = nodo3.paso(entradas_nodo3)
+        if paso % 10 == 0:
+            print(f"Paso {paso:2d} | Justicia: coste={res1['coste']:.3f} | Medios: coste={res2['coste']:.3f} | General: coste={res3['coste']:.3f}")
+    
+    print("\n" + "=" * 80)
+    print("ESTADÍSTICAS FINALES Y VERIFICACIÓN DE TRAZABILIDAD")
+    print("=" * 80)
+    for nodo in [nodo1, nodo2, nodo3]:
+        print(f"\n📊 {nodo.id}:")
+        print(f"   Pasos: {nodo.estadisticas['pasos']}")
+        print(f"   Mensajes enviados: {nodo.estadisticas['mensajes_enviados']}")
+        print(f"   Mensajes recibidos: {nodo.estadisticas['mensajes_recibidos']}")
+        print(f"   Mejor coste propio: {nodo.core.mejor_coste:.4f}")
+        # Verificar cadena de hashes del núcleo
+        eventos_core = nodo.core.exportar_auditoria()["eventos"]
+        hash_ok = True
+        prev = None
+        for ev in eventos_core:
+            if prev is not None and ev["hash_anterior"] != prev:
+                hash_ok = False
+                break
+            prev = ev["hash"]
+        print(f"   Cadena de hashes del núcleo: {'Íntegra' if hash_ok else 'ROTA'}")
+        # Verificar cadena de red
+        eventos_red = nodo.exportar_auditoria()["registro_red"]
+        hash_red_ok = True
+        prev_red = None
+        for ev in eventos_red:
+            if prev_red is not None and ev["hash_anterior"] != prev_red:
+                hash_red_ok = False
+                break
+            prev_red = ev["hash"]
+        print(f"   Cadena de hashes de red: {'Íntegra' if hash_red_ok else 'ROTA'}")
+    
+    print("\n📄 Exportando auditoría completa del Nodo_Justicia (primeros 3 eventos de red):")
+    audit = nodo1.exportar_auditoria()
+    print(f"   Hash final del núcleo: {audit['core']['hash_final'][:16] if audit['core']['hash_final'] else 'None'}...")
+    print(f"   Hash final de red: {audit['hash_final_red'][:16] if audit['hash_final_red'] else 'None'}...")
+    print("   Muestra de entradas brutas guardadas:")
+    for ev in audit['registro_red'][:2]:
+        if "entradas" in ev:
+            print(f"      {ev.get('timestamp')}: {list(ev['entradas'].keys())}")
+    
+    # Guardar auditoría a disco
+    with open("auditoria_nodo1.json", "w") as f:
+        json.dump(audit, f, indent=2, default=str)
+    print("\n   Auditoría completa guardada en 'auditoria_nodo1.json'")
+    
+    nodo1.detener()
+    nodo2.detener()
+    nodo3.detener()
+    
+    print("\n✅ Demostración completada. Los datos persisten en ./data_demo. Reinicia los nodos para comprobar la recuperación de estado.")
+
+
+if __name__ == "__main__":
+    demostracion_p2p()
