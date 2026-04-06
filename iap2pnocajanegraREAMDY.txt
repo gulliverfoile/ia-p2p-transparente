@@ -1,0 +1,137 @@
+Sistema P2P de Agentes Prudenciales con Trazabilidad y Ética Integrada: Una Prueba de Concepto No Validada
+Resumen
+Este documento describe una prueba de concepto de un sistema descentralizado de agentes inteligentes que combinan aprendizaje por refuerzo basado en modelos, un módulo ético con veto de daño, memoria episódica para la curiosidad, trazabilidad completa mediante cadena de hashes y firmas Ed25519, y comunicación P2P para fusión de modelos. El objetivo es demostrar la viabilidad arquitectónica de una IA distribuida, auditable y con principios éticos explícitos, sin recurrir a cajas negras. Se presentan los componentes, su integración y una simulación con tres agentes en entornos GridWorld. Se discuten las fortalezas (trazabilidad, ética situada, colaboración descentralizada) y las debilidades (planificación miope, fusión ingenua de modelos, falta de validación empírica, ausencia de anclaje global). Se enfatiza el papel del humano en el diseño de los módulos interpretables y en la auditoría de la cadena de eventos. El sistema no ha sido probado en entornos reales ni comparado con alternativas; su valor es puramente demostrativo.
+
+1. Introducción y motivación
+El desarrollo actual de sistemas de inteligencia artificial adolece de dos problemas principales: la opacidad de los modelos (cajas negras) y la centralización del control (grandes corporaciones o gobiernos). Este trabajo explora una vía alternativa: agentes autónomos que operan en una red peer-to-peer, cuyas decisiones son completamente rastreables y cuyo comportamiento está guiado por un módulo ético explícito. La colaboración humano-IA es aquí fundamental: el humano define los módulos interpretables (reglas de evaluación de riesgo, principios éticos) y audita la cadena de eventos; la IA se encarga de la optimización local y el intercambio de conocimiento.
+
+No se presenta ninguna validación experimental rigurosa. El sistema es una prueba de concepto funcional pero no probada en términos de rendimiento, escalabilidad o robustez. Su único propósito es mostrar que es posible construir algo así.
+
+2. Arquitectura del sistema
+El sistema consta de múltiples agentes P2PPrudentialAgent, cada uno con los siguientes componentes:
+
+2.1 Entorno real (GridWorld)
+Un entorno discreto de 5×5 con una meta, un recurso y tres peligros. El agente recibe recompensas por llegar a la meta (+10) o recoger el recurso (+3), y penalizaciones por pisar un peligro (-5). La observación es una vista local de 3×3 alrededor del agente.
+
+2.2 Modelo del mundo (racional)
+Tabla de frecuencias de transiciones (estado, acción) -> siguiente estado y lista de recompensas observadas. La representación del estado es una cadena que codifica la posición y las primeras letras de las celdas visibles. Este modelo es transparente (se puede inspeccionar) pero no generaliza.
+
+2.3 Planificador por rollouts
+Dado el estado actual, simula n_rollouts=30 trayectorias de profundidad 4 para cada acción, usando el modelo del mundo y una política aleatoria con epsilon=0.2. La puntuación incluye recompensas descontadas más una bonificación por novedad (basada en similitud coseno con experiencias pasadas almacenadas en una memoria episódica). La acción con mayor puntuación es seleccionada, a menos que sea vetada por el módulo ético.
+
+2.4 Módulo ético (virtuoso)
+Aplica un veto a las acciones cuyo beneficio esperado (recompensa predicha + recompensa de simulación) menos el daño esperado (probabilidad de peligro × 5) sea inferior a un margen de seguridad (min_safe_margin=2.0 más un extra_margin proporcionado por el peso adaptativo plato). Este margen se ajusta dinámicamente según el rendimiento pasado.
+
+2.5 Memoria episódica y curiosidad
+Almacena representaciones vectoriales de estados (mediante un vectorizador muy simple de hash de palabras) y permite consultar la similitud con estados pasados. La bonificación por novedad incentiva la exploración de estados poco visitados.
+
+2.6 Trazabilidad
+Cada evento (inicio del agente, inicio de episodio, paso individual, fin de episodio, fusión de modelos) se registra en una base de datos SQLite con:
+
+Un hash SHA256 encadenado (incluyendo el hash del evento anterior).
+
+Una firma Ed25519 del hash.
+
+La clave pública del agente se almacena junto con los eventos.
+
+Esto permite verificar posteriormente la integridad y autenticidad de todo el historial.
+
+2.7 Capa P2P y fusión de modelos
+Los agentes se comunican mediante sockets TCP. Cada cierto número de pasos (share_interval_steps=10), un agente serializa su modelo del mundo (tablas de transiciones y recompensas) y lo envía a sus pares, junto con una firma. Al recibir, el agente fusiona el modelo externo con el propio mediante una suma ponderada de conteos (peso 0.5). No hay selección ni validación de la calidad del modelo recibido.
+
+2.8 Pesos adaptativos (plato, meme, wuwei)
+Estos pesos (con rangos predefinidos) se actualizan tras cada episodio según la mejora relativa de la recompensa respecto al promedio histórico. El peso plato influye en el margen ético (extra_margin = plato * 0.1). Los otros dos (meme, wuwei) están presentes pero no se utilizan activamente en esta versión.
+
+3. Fortalezas (lo que el sistema demuestra)
+Trazabilidad completa y verificable
+Cada decisión, cada intercambio, cada ajuste de pesos queda registrado en una cadena de hashes firmada. Un auditor puede reconstruir la historia completa de un agente y verificar su integridad.
+
+Ética integrada en la arquitectura
+El módulo ético no es un posprocesado ni una capa de prompting; es un veto dentro del bucle de decisión que utiliza el mismo modelo del mundo para estimar daños. Además, el margen de seguridad se adapta al rendimiento, conectando ética y aprendizaje.
+
+Aprendizaje colaborativo descentralizado
+Los agentes comparten sus modelos del mundo sin necesidad de un servidor central. Esto permite acelerar el aprendizaje en entornos similares y es un paso hacia sistemas de IA federada verdaderamente P2P.
+
+Interpretabilidad de los componentes
+El modelo del mundo es una tabla, el planificador es una heurística, la memoria episódica es una búsqueda por similitud coseno, la ética es una regla lineal. Todos son transparentes por diseño; no hay cajas negras en la arquitectura base.
+
+Colaboración humano-IA explícita
+El humano define los módulos de percepción (en este caso, la representación de estado y la función de recompensa), los principios éticos (margen de seguridad, penalización por peligro) y los mecanismos de adaptación. La IA solo optimiza dentro de esos límites. Además, el humano puede auditar la cadena de eventos en cualquier momento.
+
+Código ejecutable y autónomo
+El sistema está implementado en Python puro, sin dependencias externas pesadas (solo cryptography y numpy). La demostración con tres agentes en hilos separados funciona sin intervención.
+
+4. Debilidades (lo que el sistema no resuelve o no prueba)
+Falta de validación empírica
+El sistema no ha sido probado más allá de la demostración de funcionamiento. No se han medido tasas de aprendizaje, comparado con agentes no colaborativos, evaluado la robustez frente a fallos de red o ataques, ni analizado la calidad de las fusiones de modelo. Sin experimentos controlados, su utilidad práctica es desconocida.
+
+Planificación extremadamente limitada
+Los rollouts de profundidad 4 con acciones aleatorias son apenas una búsqueda local. En entornos con recompensas retardadas o planificación a largo plazo, este método fallaría. No hay ningún tipo de búsqueda en árbol, valoración de estados ni aprendizaje de funciones de valor.
+
+Fusión de modelos ingenua y potencialmente dañina
+La fusión por suma ponderada (peso fijo 0.5) no distingue entre modelos de alta o baja calidad, ni entre entornos diferentes. Un agente que haya aprendido en un GridWorld con peligros en posiciones distintas puede contaminar el modelo de otro. No hay mecanismos de selección, detección de conflictos o reputación.
+
+Atractores computacionales y desbalance de influencia
+El sistema hereda el problema discutido anteriormente: nodos con mayor capacidad de cómputo ejecutarán más pasos por segundo y, aunque el intervalo de envío es fijo (cada 10 pasos), enviarán más mensajes por unidad de tiempo. Sin ponderación por frecuencia o límites de ancho de banda, pueden convertirse en atractores que distorsionan el aprendizaje colectivo.
+
+El modelo del mundo no es persistente
+Se guarda solo en RAM. Si un agente se reinicia, pierde todo el conocimiento adquirido (aunque la trazabilidad persiste). Esto limita su aplicabilidad en sistemas de larga duración.
+
+Ética monocriterio y consecuencialista
+Solo se considera el daño físico (pisar un peligro). No hay principios de justicia, honestidad, no maleficencia más allá del daño directo, ni capacidad para manejar dilemas éticos complejos. El veto es binario, no gradual.
+
+Trazabilidad local, no global
+Cada agente tiene su propia cadena de hashes. No hay una cadena compartida que pruebe el orden global de los eventos entre agentes. Un auditor externo tendría que confiar en que las marcas de tiempo locales son correctas, lo que es frágil.
+
+No hay defensa contra nodos maliciosos
+Aunque se verifican firmas, un nodo puede enviar modelos falsos (con transiciones inventadas) y los demás los fusionarán igualmente. No hay mecanismos de consenso bizantino, reputación o exclusión.
+
+Escalabilidad no evaluada
+La comunicación es TCP punto a punto. Con decenas de agentes, el número de conexiones crece cuadráticamente y el tráfico de fusión de modelos podría colapsar la red.
+
+Dependencia de semillas aleatorias
+La demostración usa semillas fijas para que sea reproducible, pero el comportamiento del sistema es altamente estocástico. No se ha caracterizado la varianza de los resultados.
+
+5. La colaboración humano-IA en este sistema
+El papel del humano es central en tres niveles:
+
+Diseño de los módulos interpretables
+El humano escribe las reglas de state_to_repr, el vectorizador, la función de bonificación por novedad, el veto ético y la función de adaptación de pesos. La IA no modifica estas reglas; solo opera dentro de ellas.
+
+Auditoría de la cadena de eventos
+El humano (o una herramienta que ejecute el humano) puede extraer la base de datos de un agente, verificar las firmas y la cadena de hashes, y reconstruir todas las decisiones tomadas. Esto permite explicación post-hoc y rendición de cuentas.
+
+Configuración de la colaboración P2P
+El humano decide qué agentes se conectan entre sí (topología de la red) y los intervalos de intercambio. También puede inspeccionar las estadísticas de comunicación y decidir excluir agentes con comportamientos anómalos.
+
+En este sentido, el sistema es un asistente aumentado para la toma de decisiones, no un sustituto autónomo. La IA proporciona velocidad y capacidad de cómputo, pero el humano mantiene el control de los principios y la supervisión.
+
+6. Conclusión y trabajos futuros (no realizados)
+Esta prueba de concepto demuestra que es factible construir un agente P2P con trazabilidad total, ética explícita y componentes interpretables, usando únicamente tecnologías estándar (Python, SQLite, criptografía de curvas elípticas). El código está disponible y es ejecutable.
+
+Sin embargo, no se ha probado si el sistema aprende eficazmente, si la colaboración mejora el rendimiento, si los pesos adaptativos convergen a valores sensatos, ni si la trazabilidad resiste ataques activos. Tampoco se ha comparado con sistemas centralizados o con otros enfoques de IA distribuida.
+
+Para convertir esta prueba de concepto en un sistema útil, se necesitarían al menos:
+
+Un conjunto de experimentos controlados en entornos más complejos.
+
+Mecanismos de fusión selectiva de modelos (por ejemplo, basados en la mejora observada en el rendimiento local).
+
+Un servicio de anclaje de hashes (blockchain testnet) para pruebas externas de integridad.
+
+Un algoritmo de consenso ligero para evitar atractores y nodos maliciosos.
+
+Un planificador más potente (MCTS o aprendizaje por refuerzo basado en modelos con redes neuronales), aunque eso reintroduciría opacidad parcial.
+
+Declaración explícita: Este sistema no ha sido validado empíricamente. Su valor es únicamente arquitectónico y demostrativo. No se recomienda su uso en entornos reales sin una validación exhaustiva.
+
+Referencias (ilustrativas, no citadas directamente)
+Bonawitz, K., et al. (2017). Practical Secure Aggregation for Federated Learning on User-Held Data. arXiv:1611.04482.
+
+Pathak, D., et al. (2017). Curiosity-driven Exploration by Self-supervised Prediction. ICML.
+
+Warnat-Herresthal, S., et al. (2021). Swarm Learning for decentralized and confidential clinical machine learning. Nature.
+
+Russell, S. (2019). Human Compatible: Artificial Intelligence and the Problem of Control. Viking.
+
+Agradecimientos: Este trabajo no ha recibido financiación. El autor agradece a los revisores anónimos por su paciencia.
