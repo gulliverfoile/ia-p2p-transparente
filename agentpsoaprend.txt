@@ -1,0 +1,481 @@
+import numpy as np
+import random
+from typing import List, Dict, Callable, Any, Optional
+from concurrent.futures import ThreadPoolExecutor
+import logging
+from dataclasses import dataclass
+from enum import Enum
+import time
+
+# =========================
+# Tipos y Configuración
+# =========================
+class ModuleType(Enum):
+    PLANNING = "planning"
+    ETHICAL_FILTER = "ethical_filter"
+    SOCIAL_LEARNING = "social_learning"
+    META_COGNITION = "meta_cognition"
+
+@dataclass
+class NodeConfig:
+    dimensions: int
+    search_space: tuple
+    modules: List[ModuleType]
+    planning_horizon: int = 3
+    n_sequences: int = 5
+    memory_size: int = 100
+
+# =========================
+# Nodo Estratégico Mejorado
+# =========================
+class ModularStrategicNode:
+    def __init__(self, node_id: int, config: NodeConfig):
+        self.node_id = node_id
+        self.config = config
+        self.dimensions = config.dimensions
+        self.search_space = config.search_space
+        
+        # Estado interno
+        self.position = np.random.uniform(search_space[0], search_space[1], dimensions)
+        self.velocity = np.zeros(dimensions)
+        self.personal_best = self.position.copy()
+        self.personal_best_fitness = float('inf')
+        
+        # Sistema de módulos mejorado
+        self.modules: Dict[ModuleType, bool] = {module: True for module in config.modules}
+        self.module_performance: Dict[ModuleType, float] = {}
+        
+        # Memoria de experiencia (circular buffer)
+        self.memory_buffer: List[Dict[str, Any]] = []
+        self.memory_size = config.memory_size
+        
+        # Tracking avanzado
+        self.fitness_history: List[float] = []
+        self.entropy_history: List[float] = []
+        self.decision_history: List[str] = []
+        
+        # Estado interno rico
+        self.confidence = 0.5
+        self.curiosity = 0.7
+        self.social_influence = 0.3
+
+    # ---------- Sistema de Módulos Mejorado ----------
+    def toggle_module(self, module: ModuleType, state: bool):
+        """Activar/desactivar módulo específico"""
+        self.modules[module] = state
+        logging.debug(f"Node {self.node_id}: {module.name} -> {state}")
+
+    def get_active_modules(self) -> List[ModuleType]:
+        """Obtener módulos activos"""
+        return [module for module, active in self.modules.items() if active]
+
+    def evaluate_module_performance(self, module: ModuleType, success: bool):
+        """Evaluar performance de módulo para auto-ajuste"""
+        current_perf = self.module_performance.get(module, 0.5)
+        adjustment = 0.1 if success else -0.1
+        self.module_performance[module] = np.clip(current_perf + adjustment, 0.1, 1.0)
+
+    # ---------- Memoria Mejorada ----------
+    def store_experience(self, experience: Dict[str, Any]):
+        """Almacenar experiencia en buffer circular"""
+        if len(self.memory_buffer) >= self.memory_size:
+            self.memory_buffer.pop(0)
+        self.memory_buffer.append(experience)
+
+    def retrieve_relevant_experience(self, context: str, max_results: int = 5) -> List[Dict]:
+        """Recuperar experiencias relevantes al contexto"""
+        relevant = []
+        for exp in reversed(self.memory_buffer):  # Más recientes primero
+            if context in exp.get('tags', []):
+                relevant.append(exp)
+            if len(relevant) >= max_results:
+                break
+        return relevant
+
+    def share_knowledge(self, other_node: 'ModularStrategicNode', knowledge_type: str):
+        """Compartir conocimiento específico de forma eficiente"""
+        if knowledge_type == "best_practices":
+            # Compartir mejores estrategias
+            best_experiences = self.retrieve_relevant_experience("high_success", 2)
+            for exp in best_experiences:
+                other_node.store_experience(exp)
+                
+        elif knowledge_type == "warnings":
+            # Compartir experiencias negativas
+            warnings = self.retrieve_relevant_experience("failure", 2)
+            for warn in warnings:
+                other_node.store_experience(warn)
+
+    # ---------- Planificación Mejorada ----------
+    def plan_next_move(self, global_best: np.ndarray, objective_function: Callable) -> np.ndarray:
+        """Planificación estratégica usando la función objetivo real"""
+        if not self.modules.get(ModuleType.PLANNING, True):
+            return self.position
+        
+        best_sequence_score = float('inf')
+        best_first_move = None
+        
+        for seq_idx in range(self.config.n_sequences):
+            current_pos = self.position.copy()
+            sequence_score = 0.0
+            sequence_successful = True
+            
+            for step in range(self.config.planning_horizon):
+                # Movimiento inteligente basado en estado interno
+                cognitive = self.personal_best - current_pos
+                social = global_best - current_pos
+                
+                # Exploración adaptativa basada en curiosidad
+                exploration_magnitude = 0.1 + 0.2 * self.curiosity
+                exploration = np.random.normal(0, exploration_magnitude, self.dimensions)
+                
+                # Combinación ponderada
+                step_move = (0.3 * cognitive + 
+                           0.3 * social * self.social_influence + 
+                           0.4 * exploration)
+                
+                current_pos += step_move
+                current_pos = np.clip(current_pos, *self.search_space)
+                
+                # Usar la función objetivo REAL
+                step_fitness = objective_function(current_pos)
+                sequence_score += step_fitness / (step + 1)
+                
+                # Verificar restricciones éticas si el módulo está activo
+                if self.modules.get(ModuleType.ETHICAL_FILTER, False):
+                    if not self._ethical_check(current_pos, objective_function):
+                        sequence_successful = False
+                        break
+            
+            if sequence_successful and sequence_score < best_sequence_score:
+                best_sequence_score = sequence_score
+                best_first_move = current_pos
+        
+        # Evaluar performance del módulo de planificación
+        planning_success = best_first_move is not None and best_sequence_score < float('inf')
+        self.evaluate_module_performance(ModuleType.PLANNING, planning_success)
+        
+        return best_first_move if best_first_move is not None else self.position
+
+    def _ethical_check(self, position: np.ndarray, objective_function: Callable) -> bool:
+        """Filtro ético básico - puede extenderse"""
+        # Ejemplo: rechazar soluciones que violen constraints básicas
+        if np.any(np.isnan(position)) or np.any(np.isinf(position)):
+            return False
+        
+        # Ejemplo: rechazar si el fitness es demasiado malo (podría indicar región problemática)
+        fitness = objective_function(position)
+        if np.isnan(fitness) or np.isinf(fitness):
+            return False
+            
+        return True
+
+    # ---------- Actualización Mejorada ----------
+    def update(self, global_best: np.ndarray, objective_function: Callable, population_positions: np.ndarray = None):
+        """Actualización completa con todos los módulos"""
+        
+        # 1. Planificación estratégica
+        strategic_move = self.plan_next_move(global_best, objective_function)
+        
+        # 2. Componente PSO mejorado
+        r1, r2 = np.random.random(2)
+        cognitive = self.personal_best - self.position
+        social = global_best - self.position
+        
+        # Ajuste dinámico basado en confianza
+        cognitive_weight = 0.3 * self.confidence
+        social_weight = 0.3 * self.social_influence
+        strategic_weight = 0.4 * (1.0 - self.confidence)  # Más estratégico cuando menos confiado
+        
+        # Actualización de velocidad
+        self.velocity = (0.729 * self.velocity + 
+                        strategic_weight * (strategic_move - self.position) + 
+                        cognitive_weight * r1 * cognitive + 
+                        social_weight * r2 * social)
+        
+        # Clamping adaptativo
+        v_max = 0.2 * (self.search_space[1] - self.search_space[0])
+        self.velocity = np.clip(self.velocity, -v_max, v_max)
+        
+        # 3. Actualizar posición
+        old_position = self.position.copy()
+        self.position += self.velocity
+        self.position = np.clip(self.position, *self.search_space)
+        
+        # 4. Evaluar y actualizar
+        current_fitness = objective_function(self.position)
+        improvement = self.personal_best_fitness - current_fitness
+        
+        if current_fitness < self.personal_best_fitness:
+            self.personal_best = self.position.copy()
+            self.personal_best_fitness = current_fitness
+            self.confidence = np.clip(self.confidence + 0.05, 0.1, 1.0)
+            
+            # Almacenar experiencia exitosa
+            self.store_experience({
+                'position': self.position.copy(),
+                'fitness': current_fitness,
+                'strategy': 'successful_update',
+                'tags': ['high_success', 'improvement'],
+                'improvement': improvement,
+                'timestamp': time.time()
+            })
+        else:
+            self.confidence = np.clip(self.confidence - 0.02, 0.1, 1.0)
+        
+        # 5. Aprendizaje social si está activo
+        if self.modules.get(ModuleType.SOCIAL_LEARNING, False) and population_positions is not None:
+            self._social_learning(population_positions, objective_function)
+        
+        # 6. Tracking
+        self.fitness_history.append(current_fitness)
+        self._update_entropy(population_positions)
+        
+        # 7. Meta-cognición
+        if self.modules.get(ModuleType.META_COGNITION, False):
+            self._meta_cognition()
+
+    def _social_learning(self, population_positions: np.ndarray, objective_function: Callable):
+        """Aprendizaje observando a otros nodos"""
+        if len(population_positions) < 2:
+            return
+            
+        # Encontrar nodos exitosos
+        fitness_values = [objective_function(pos) for pos in population_positions]
+        best_idx = np.argmin(fitness_values)
+        
+        if best_idx != self.node_id:  # No compararse consigo mismo
+            best_position = population_positions[best_idx]
+            direction = best_position - self.position
+            
+            # Aprender parcialmente de los mejores
+            learning_rate = 0.1 * self.social_influence
+            self.position += learning_rate * direction
+            self.position = np.clip(self.position, *self.search_space)
+
+    def _meta_cognition(self):
+        """Auto-reflexión sobre el desempeño"""
+        if len(self.fitness_history) < 5:
+            return
+            
+        # Analizar tendencia reciente
+        recent_fitness = self.fitness_history[-5:]
+        trend = np.polyfit(range(5), recent_fitness, 1)[0]
+        
+        # Ajustar curiosidad basado en tendencia
+        if trend < 0:  # Mejorando
+            self.curiosity = np.clip(self.curiosity - 0.05, 0.1, 0.9)
+        else:  # Estancado o empeorando
+            self.curiosity = np.clip(self.curiosity + 0.1, 0.1, 0.9)
+
+    def _update_entropy(self, population_positions: np.ndarray):
+        """Calcular entropía de diversidad"""
+        if population_positions is None or len(population_positions) < 2:
+            self.entropy_history.append(0.0)
+            return
+            
+        distances = np.linalg.norm(population_positions - self.position, axis=1)
+        probabilities = distances / (np.sum(distances) + 1e-12)
+        probabilities = probabilities[probabilities > 0]
+        entropy = -np.sum(probabilities * np.log(probabilities))
+        self.entropy_history.append(entropy)
+
+# =========================
+# Sistema Modular Mejorado
+# =========================
+class ModularSwarmSystem:
+    def __init__(self, num_nodes: int, dimensions: int, search_space: tuple, 
+                 objective_function: Callable, use_parallel: bool = True):
+        
+        # Configuración base
+        base_config = NodeConfig(
+            dimensions=dimensions,
+            search_space=search_space,
+            modules=[ModuleType.PLANNING, ModuleType.SOCIAL_LEARNING]
+        )
+        
+        # Inicializar nodos con configuraciones variadas
+        self.nodes: List[ModularStrategicNode] = []
+        for i in range(num_nodes):
+            node_config = base_config
+            if i == 0:  # Nodo líder con más capacidades
+                node_config.modules.append(ModuleType.META_COGNITION)
+            elif i == num_nodes - 1:  # Nodo ético
+                node_config.modules.append(ModuleType.ETHICAL_FILTER)
+                
+            self.nodes.append(ModularStrategicNode(i, node_config))
+        
+        self.objective_function = objective_function
+        self.use_parallel = use_parallel
+        self.executor = ThreadPoolExecutor(max_workers=num_nodes) if use_parallel else None
+        
+        # Estado global mejorado
+        self.global_best = None
+        self.global_best_fitness = float('inf')
+        self.global_knowledge_base: Dict[str, Any] = {}
+        self.convergence_history: List[float] = []
+        self.diversity_history: List[float] = []
+        
+        self._initialize_global_best()
+
+    def _initialize_global_best(self):
+        """Inicialización paralelizada"""
+        if self.use_parallel and self.executor:
+            # Evaluación paralela inicial
+            positions = [node.position for node in self.nodes]
+            futures = [self.executor.submit(self.objective_function, pos) for pos in positions]
+            fitness_values = [future.result() for future in futures]
+            
+            for i, fitness in enumerate(fitness_values):
+                if fitness < self.global_best_fitness:
+                    self.global_best = self.nodes[i].position.copy()
+                    self.global_best_fitness = fitness
+        else:
+            # Evaluación secuencial
+            for node in self.nodes:
+                fitness = self.objective_function(node.position)
+                if fitness < self.global_best_fitness:
+                    self.global_best = node.position.copy()
+                    self.global_best_fitness = fitness
+
+    def step(self):
+        """Paso de evolución del sistema"""
+        positions = np.array([node.position for node in self.nodes])
+        
+        # Actualización paralelizada de nodos
+        if self.use_parallel and self.executor:
+            futures = []
+            for node in self.nodes:
+                future = self.executor.submit(
+                    node.update, self.global_best, self.objective_function, positions
+                )
+                futures.append(future)
+            
+            # Esperar completación
+            for future in futures:
+                future.result()
+        else:
+            # Actualización secuencial
+            for node in self.nodes:
+                node.update(self.global_best, self.objective_function, positions)
+        
+        # Actualizar mejor global
+        self._update_global_best()
+        
+        # Intercambio de conocimiento (más eficiente)
+        self._efficient_knowledge_exchange()
+        
+        # Métricas globales
+        self.convergence_history.append(self.global_best_fitness)
+        self.diversity_history.append(self._calculate_population_diversity())
+        
+        # Aprendizaje colectivo
+        self._collective_learning()
+
+    def _update_global_best(self):
+        """Actualizar la mejor solución global"""
+        for node in self.nodes:
+            if node.personal_best_fitness < self.global_best_fitness:
+                self.global_best = node.personal_best.copy()
+                self.global_best_fitness = node.personal_best_fitness
+
+    def _efficient_knowledge_exchange(self):
+        """Intercambio de conocimiento eficiente (O(n))"""
+        # Solo los nodos con alta confianza comparten conocimiento
+        confident_nodes = [node for node in self.nodes if node.confidence > 0.7]
+        
+        if len(confident_nodes) >= 2:
+            # Emparejamiento aleatorio entre nodos confiados
+            random.shuffle(confident_nodes)
+            for i in range(0, len(confident_nodes)-1, 2):
+                node_a, node_b = confident_nodes[i], confident_nodes[i+1]
+                node_a.share_knowledge(node_b, "best_practices")
+                node_b.share_knowledge(node_a, "best_practices")
+
+    def _calculate_population_diversity(self) -> float:
+        """Calcular diversidad de la población"""
+        positions = np.array([node.position for node in self.nodes])
+        centroid = np.mean(positions, axis=0)
+        distances = np.linalg.norm(positions - centroid, axis=1)
+        return float(np.mean(distances))
+
+    def _collective_learning(self):
+        """Aprendizaje colectivo basado en experiencias compartidas"""
+        # Recopilar experiencias exitosas de todos los nodos
+        successful_experiences = []
+        for node in self.nodes:
+            successful_experiences.extend(node.retrieve_relevant_experience("high_success", 2))
+        
+        # Almacenar en conocimiento global
+        if successful_experiences:
+            self.global_knowledge_base['success_patterns'] = successful_experiences[:5]  # Top 5
+
+    def run(self, iterations: int, log_frequency: int = 10):
+        """Ejecutar el sistema completo"""
+        logging.info(f"🚀 Iniciando Swarm Modular con {len(self.nodes)} nodos")
+        
+        for iteration in range(iterations):
+            self.step()
+            
+            if iteration % log_frequency == 0:
+                logging.info(
+                    f"Iteration {iteration}: Best Fitness = {self.global_best_fitness:.6f}, "
+                    f"Diversity = {self.diversity_history[-1]:.4f}"
+                )
+        
+        logging.info("✅ Optimización completada")
+
+    def get_system_stats(self) -> Dict[str, Any]:
+        """Obtener estadísticas del sistema"""
+        active_modules_count = {}
+        for module in ModuleType:
+            active_modules_count[module.name] = sum(
+                1 for node in self.nodes if node.modules.get(module, False)
+            )
+        
+        return {
+            'global_best_fitness': self.global_best_fitness,
+            'final_diversity': self.diversity_history[-1] if self.diversity_history else 0,
+            'iterations': len(self.convergence_history),
+            'active_modules': active_modules_count,
+            'average_confidence': np.mean([node.confidence for node in self.nodes]),
+            'knowledge_base_size': len(self.global_knowledge_base)
+        }
+
+# =========================
+# Funciones de Prueba
+# =========================
+def sphere_function(x: np.ndarray) -> float:
+    return float(np.sum(x**2))
+
+def rastrigin_function(x: np.ndarray) -> float:
+    A = 10
+    n = len(x)
+    return float(A * n + np.sum(x**2 - A * np.cos(2 * np.pi * x)))
+
+# =========================
+# Ejemplo de Uso
+# =========================
+if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
+    
+    # Configurar sistema
+    swarm = ModularSwarmSystem(
+        num_nodes=8,
+        dimensions=5,
+        search_space=(-5.12, 5.12),
+        objective_function=sphere_function,
+        use_parallel=True
+    )
+    
+    # Ejecutar optimización
+    swarm.run(iterations=100, log_frequency=20)
+    
+    # Resultados
+    stats = swarm.get_system_stats()
+    print("\n📊 ESTADÍSTICAS FINALES:")
+    for key, value in stats.items():
+        print(f"  {key}: {value}")
+    
+    print(f"\n🎯 MEJOR SOLUCIÓN: {swarm.global_best}")
+    print(f"📈 FITNESS FINAL: {swarm.global_best_fitness:.10f}")
