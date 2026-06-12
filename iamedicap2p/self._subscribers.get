@@ -1,0 +1,5 @@
+for cb in callbacks:
+            try:
+                cb(event)
+            except Exception as e:
+                print(f"Error en callback de {event_type}: {e}")

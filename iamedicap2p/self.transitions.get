@@ -1,0 +1,4 @@
+if not bucket:
+            return None, 0.0, 0.0
+        total = sum(bucket.values())
+        next_state = max(bucket.items(), key=lambda x: x[1])[0]

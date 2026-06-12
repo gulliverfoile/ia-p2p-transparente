@@ -1,0 +1,8 @@
+def update(self, peer_id: str, delta: float):
+        if peer_id in self.excluded:
+            return
+        current = self.get_reputation(peer_id)
+        new = current + self.update_rate * delta
+        new = max(0.0, min(1.0, new))
+        self.reputations[peer_id] = new
+        if new < self.exclusion_threshold:

@@ -1,0 +1,5 @@
+}, f)
+
+    def load(self, filepath: str):
+        if os.path.exists(filepath):
+            with open(filepath, 'rb') as f:

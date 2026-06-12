@@ -1,0 +1,17 @@
+new_transitions = defaultdict(lambda: defaultdict(int))
+        new_rewards = defaultdict(lambda: defaultdict(list))
+        for (s, a), nxt_dict in self.transitions.items():
+            if s in to_remove:
+                continue
+            for nxt, count in nxt_dict.items():
+                if nxt not in to_remove:
+                    new_transitions[(s, a)][nxt] = count
+        for (s, a), rlist in self.rewards.items():
+            if s not in to_remove:
+                new_rewards[(s, a)] = rlist
+        self.transitions = new_transitions
+        self.rewards = new_rewards
+        for state in to_remove:
+            del self.state_counts[state]
+
+    def predict_next(self, state: str, action: str) -> Tuple[Optional[str], float, float]:

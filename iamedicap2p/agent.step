@@ -1,0 +1,1 @@
+print(f"{agent.agent_id} episodio {ep+1} reward: {agent.episode_reward:.2f}")

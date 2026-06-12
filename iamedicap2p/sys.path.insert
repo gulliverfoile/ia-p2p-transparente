@@ -1,0 +1,11 @@
+import threading
+import time
+from src.agent_core import PrudentialAgent
+from src.clinical_env import ClinicalEnvironment
+from src.utils import load_config, set_global_seed
+
+def run_agent(agent, episodes=20):
+    for ep in range(episodes):
+        obs = agent.reset_for_episode()
+        done = False
+        while not done:

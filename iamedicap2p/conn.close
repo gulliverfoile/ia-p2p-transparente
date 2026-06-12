@@ -1,0 +1,3 @@
+if data and self.callback:
+                    if self.network_sim.get('enabled', False):
+                        latency = random.gauss(self.network_sim.get('latency_ms_mean', 0),

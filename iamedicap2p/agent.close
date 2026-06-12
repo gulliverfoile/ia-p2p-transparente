@@ -1,0 +1,22 @@
+def demo():
+    print("Cargando configuraciones...")
+    config_central = load_config("configs/hospital_central.yaml")
+    config_rural = load_config("configs/hospital_rural.yaml")
+    config_pedi = load_config("configs/hospital_pediatrico.yaml")
+
+    # Obtener tamaño de ventana histórica desde la configuración (por defecto 3)
+    history_window = config_central['agent'].get('history_window', 3)
+
+    print("Creando entornos clínicos con ventana temporal de", history_window, "pasos...")
+    env_central = ClinicalEnvironment(config_central['environment']['clinical_config'], seed=42, history_window=history_window)
+    env_rural = ClinicalEnvironment(config_rural['environment']['clinical_config'], seed=43, history_window=history_window)
+    env_pedi = ClinicalEnvironment(config_pedi['environment']['clinical_config'], seed=44, history_window=history_window)
+
+    print("Creando agentes...")
+    agent_central = PrudentialAgent("Hospital_Central", config_central, env_central)
+    agent_rural = PrudentialAgent("Hospital_Rural", config_rural, env_rural)
+    agent_pedi = PrudentialAgent("Hospital_Pediatrico", config_pedi, env_pedi)
+
+    if agent_central.p2p and agent_rural.p2p and agent_pedi.p2p:
+        print("Conectando red P2P...")
+        agent_central.p2p.add_peer("Hospital_Rural", "localhost", agent_rural.p2p.port,

@@ -1,0 +1,1 @@
+def query(self, text: str, topk: int = 3) -> List[Tuple[float, dict]]:

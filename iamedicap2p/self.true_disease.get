@@ -1,0 +1,13 @@
+reward -= false_neg_cost
+                info['correct'] = False
+            done = True
+            self.diagnosis_made = disease_name
+
+        elif action.startswith('order_'):
+            test_name = action.split('_', 1)[1]
+            reward += self.rewards['unnecessary_test']
+            if random.random() < 0.1:
+                reward += self.rewards['harm_from_test']
+                info['harm'] = True
+                self._harm_occurred = True
+            if test_name not in self.tests_done:

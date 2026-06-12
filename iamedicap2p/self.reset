@@ -1,0 +1,8 @@
+def reset(self):
+        # Elegir enfermedad según prevalencia
+        probs = [d['prevalence'] for d in self.diseases]
+        self.true_disease = random.choices(self.diseases, weights=probs, k=1)[0]
+        # Inicializar síntomas observados (algunos pueden no aparecer)
+        self.observed_symptoms = []
+        for symptom in self.true_disease['symptoms']:
+            if random.random() < 0.8:

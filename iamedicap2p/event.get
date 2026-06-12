@@ -1,0 +1,3 @@
+datos['source_agent'] = self.agent_id
+        nuevo_hash = self._calculate_hash(tipo, datos)
+        firma = self._sign(nuevo_hash)

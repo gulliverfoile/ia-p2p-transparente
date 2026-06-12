@@ -1,0 +1,8 @@
+if not ethics.is_allowed(action, pred_reward + avg_score, hazard_risk, extra_margin, uncertainty):
+                avg_score = -1e9
+            action_scores[action] = avg_score
+            if avg_score > best_score:
+                best_score = avg_score
+                best_action = action
+
+        if best_action is None:

@@ -1,0 +1,7 @@
+self.reputation = ReputationManager(
+            initial=rep_config.get('initial_reputation', 0.5),
+            update_rate=rep_config.get('update_rate', 0.1),
+            exclusion_threshold=rep_config.get('exclusion_threshold', 0.2)
+        )
+
+        # P2P

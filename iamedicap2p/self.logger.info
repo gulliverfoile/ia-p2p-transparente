@@ -1,0 +1,2 @@
+def close(self):
+        if self.p2p:

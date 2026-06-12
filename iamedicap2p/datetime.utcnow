@@ -1,0 +1,6 @@
+}, sort_keys=True, default=str)
+        if self.last_hash:
+            contenido += self.last_hash
+        return hashlib.sha256(contenido.encode()).hexdigest()
+
+    def _sign(self, msg: str) -> str:

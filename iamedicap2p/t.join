@@ -1,0 +1,6 @@
+print("\n✅ Demo completada. Los modelos y auditorías se guardaron en ./data/")
+    print("Verifica integridad de cadena de hashes para Hospital_Central:")
+    print(f"  Cadena válida: {agent_central.audit.verify_chain()}")
+
+if __name__ == "__main__":
+    demo()

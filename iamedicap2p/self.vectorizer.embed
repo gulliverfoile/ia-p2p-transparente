@@ -1,0 +1,2 @@
+sims = []
+        for item in self.store:

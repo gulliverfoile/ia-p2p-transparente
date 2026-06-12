@@ -1,0 +1,1 @@
+self._emit('AGENT_STOP', {'final_weights': self.weights})

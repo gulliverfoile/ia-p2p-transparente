@@ -1,0 +1,11 @@
+for r in rew_list:
+                self.rewards[(s, a)].append(r)
+        for state, cnt in other_data['state_counts'].items():
+            self.state_counts[state] += int(cnt * weight)
+
+    def save(self, filepath: str):
+        with open(filepath, 'wb') as f:
+            pickle.dump({
+                'transitions': dict(self.transitions),
+                'rewards': dict(self.rewards),
+                'state_counts': dict(self.state_counts),

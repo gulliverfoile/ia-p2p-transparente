@@ -1,0 +1,51 @@
+agent:
+  seed: 42
+  share_interval_steps: 10
+  lr_weights: 0.005
+  cost_change_penalty: 0.05
+  cold_start_episodes: 5
+  history_window: 3   # NUEVO: número de pasos a recordar para el flujo temporal
+
+world_model:
+  type: "tabular"
+  max_states: 10000
+
+planner:
+  depth: 4
+  n_rollouts: 30
+  epsilon: 0.2
+  novelty_bonus_weight: 0.5
+
+ethics:
+  min_safe_margin: 2.0
+  hazard_penalty: -5.0
+  dynamic_margin: true
+  uncertainty_factor: true
+
+memory:
+  maxlen: 2000
+  vec_dim: 128
+
+p2p:
+  enabled: true
+  listen_host: "0.0.0.0"
+  listen_port: 0
+  gossip_interval_steps: 10
+  merge_weight: 0.5
+  network_simulation:
+    enabled: false
+    latency_ms_mean: 50
+    latency_ms_std: 10
+    packet_loss_rate: 0.0
+    corruption_rate: 0.0
+
+reputation:
+  enabled: true
+  initial_reputation: 0.5
+  update_rate: 0.1
+  exclusion_threshold: 0.2
+  min_validation_episodes: 5
+
+environment:
+  type: "clinical"
+Los archivos hospital_central.yaml, hospital_rural.yaml, hospital_pediatrico.yaml son iguales a los que ya proporcioné (solo cambian prevalencias). No los repito aquí por brevedad, pero deben existir.

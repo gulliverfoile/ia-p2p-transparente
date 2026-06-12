@@ -1,0 +1,4 @@
+self._emit('EPISODE_END', {
+            'episode': self.episode_count,
+            'reward': self.episode_reward,
+            'improvement': improvement,

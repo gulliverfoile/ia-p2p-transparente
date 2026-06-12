@@ -1,0 +1,8 @@
+except Exception:
+                if self.running:
+                    pass
+
+    def send_model(self, peer_id: str, host: str, port: int, model_data: bytes):
+        if peer_id in self.peers:
+            host, port, _ = self.peers[peer_id]
+        try:

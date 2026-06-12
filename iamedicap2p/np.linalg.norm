@@ -1,0 +1,10 @@
+if norm > 0:
+            v /= norm
+        return v
+
+class EpisodicMemory:
+    def __init__(self, maxlen: int = 2000, vec_dim: int = 128):
+        self.store = deque(maxlen=maxlen)
+        self.vectorizer = TinyVectorizer(dim=vec_dim)
+
+    def add(self, text: str, meta: Optional[dict] = None):

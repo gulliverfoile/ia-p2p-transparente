@@ -1,0 +1,2 @@
+for token in text.split():
+            h = hashlib.md5(token.encode()).hexdigest()

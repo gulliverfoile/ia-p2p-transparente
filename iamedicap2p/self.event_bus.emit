@@ -1,0 +1,2 @@
+def _on_p2p_message(self, raw_data: bytes):
+        try:

@@ -1,0 +1,3 @@
+self._emit('AGENT_INIT', {'agent_id': agent_id})
+
+    def _emit(self, event_type: str, payload: Dict):

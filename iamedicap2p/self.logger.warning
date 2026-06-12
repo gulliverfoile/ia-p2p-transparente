@@ -1,0 +1,5 @@
+def _process_incoming_models(self):
+        if not self.p2p:
+            return
+        with self.p2p.lock:
+            queue = self.p2p.incoming_queue[:]

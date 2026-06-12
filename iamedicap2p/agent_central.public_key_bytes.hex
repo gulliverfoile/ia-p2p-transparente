@@ -1,0 +1,1 @@
+agent_pedi.p2p.add_peer("Hospital_Rural", "localhost", agent_rural.p2p.port,

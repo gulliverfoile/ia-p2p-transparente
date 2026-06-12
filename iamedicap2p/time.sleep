@@ -1,0 +1,4 @@
+if random.random() < self.network_sim.get('packet_loss_rate', 0):
+                            return
+                        if random.random() < self.network_sim.get('corruption_rate', 0):
+                            data = b'corrupted'

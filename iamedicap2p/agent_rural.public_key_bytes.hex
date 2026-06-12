@@ -1,0 +1,3 @@
+print("Iniciando simulación (30 episodios por agente)...")
+    threads = []
+    for ag in [agent_central, agent_rural, agent_pedi]:

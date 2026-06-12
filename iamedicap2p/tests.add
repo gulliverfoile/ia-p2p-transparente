@@ -1,0 +1,3 @@
+self.actions = [f"predict_{d['name']}" for d in diseases] + [f"order_{t}" for t in tests]
+        else:
+            self.actions = ['up', 'down', 'left', 'right', 'stay', 'pickup']  # fallback

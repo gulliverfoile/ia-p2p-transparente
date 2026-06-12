@@ -1,0 +1,7 @@
+for peer_id, (host, port, _) in self.p2p.peers.items():
+            self.p2p.send_model(peer_id, host, port, data)
+        self._emit('MODEL_SHARED', {'peers': list(self.p2p.peers.keys())})
+
+    def _end_episode(self):
+        improvement = 0.0
+        if len(self.historical_performance) > 0:

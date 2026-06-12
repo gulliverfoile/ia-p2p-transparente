@@ -1,0 +1,10 @@
+self.episode_reward += reward
+        self.step_counter += 1
+
+        self._emit('STEP_TAKEN', {
+            'state': self.current_state,
+            'action': action,
+            'next_state': next_state,
+            'reward': reward,
+            'info': info
+        })

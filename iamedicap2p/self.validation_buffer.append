@@ -1,0 +1,19 @@
+if len(self.validation_buffer) > 200:
+            self.validation_buffer = self.validation_buffer[-200:]
+
+        if self.p2p and self.p2p_enabled and self.step_counter % self.share_interval == 0:
+            self._share_model()
+
+        self.current_obs = next_obs
+        self.current_state = next_state
+
+        if done:
+            self._end_episode()
+        return next_obs, reward, done, info
+
+    def _share_model(self):
+        model_data = self.world_model.get_model_data()
+        msg = {
+            'type': 'model_share',
+            'sender_id': self.agent_id,
+            'model_data': model_data,

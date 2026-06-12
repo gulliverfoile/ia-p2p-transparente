@@ -1,0 +1,4 @@
+if not similar:
+            return 1.0
+        max_sim = similar[0][0]
+        return max(0.0, 1.0 - max_sim)

@@ -1,0 +1,6 @@
+if msg['type'] == 'model_share':
+                peer_id = msg['sender_id']
+                if peer_id not in self.p2p.peers:
+                    return
+                pubkey_bytes = self.p2p.peers[peer_id][2]
+                pub_key = Ed25519PublicKey.from_public_bytes(pubkey_bytes)

@@ -1,0 +1,3 @@
+self.transitions = defaultdict(lambda: defaultdict(int), data['transitions'])
+            self.rewards = defaultdict(lambda: defaultdict(list), data['rewards'])
+            self.state_counts = Counter(data['state_counts'])

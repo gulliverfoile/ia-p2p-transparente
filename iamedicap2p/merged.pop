@@ -1,0 +1,4 @@
+return merged
+    return config
+
+def deep_merge(base: Dict, override: Dict) -> Dict:

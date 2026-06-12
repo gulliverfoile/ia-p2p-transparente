@@ -1,0 +1,6 @@
+for msg in queue:
+            self._merge_model_from_peer(msg)
+
+    def _merge_model_from_peer(self, msg: Dict):
+        peer_id = msg['sender_id']
+        if self.reputation.is_excluded(peer_id):

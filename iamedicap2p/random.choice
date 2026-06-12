@@ -1,0 +1,5 @@
+novelty = self._novelty_bonus(state, memory)
+        total += self.novelty_bonus_weight * novelty
+        return total
+
+    def _novelty_bonus(self, state: str, memory) -> float:

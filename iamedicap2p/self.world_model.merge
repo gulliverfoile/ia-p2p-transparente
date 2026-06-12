@@ -1,0 +1,26 @@
+self._emit('MODEL_MERGE_ACCEPTED', {'peer': peer_id, 'improvement': 0.0})
+
+    def _evaluate_model_improvement(self, external_model_data: Dict) -> float:
+        if len(self.validation_buffer) == 0:
+            return 0.0
+        total_error_current = 0.0
+        total_error_external = 0.0
+        n = 0
+        for (state, action, true_next, true_reward, _) in self.validation_buffer:
+            _, pred_reward_cur, _ = self.world_model.predict_next(state, action)
+            total_error_current += abs(pred_reward_cur - true_reward)
+            key = f"{state}|{action}"
+            if key in external_model_data.get('rewards', {}):
+                ext_rewards = external_model_data['rewards'][key]
+                pred_reward_ext = sum(ext_rewards)/len(ext_rewards) if ext_rewards else 0.0
+                total_error_external += abs(pred_reward_ext - true_reward)
+            else:
+                total_error_external += abs(0.0 - true_reward)
+            n += 1
+        if n == 0:
+            return 0.0
+        error_cur = total_error_current / n
+        error_ext = total_error_external / n
+        return (error_cur - error_ext) / (error_cur + 1e-8)
+
+    def reset_for_episode(self):

@@ -1,0 +1,1 @@
+with self.p2p.lock:

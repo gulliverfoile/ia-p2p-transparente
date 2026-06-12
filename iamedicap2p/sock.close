@@ -1,0 +1,4 @@
+except Exception:
+            pass
+
+    def add_peer(self, peer_id: str, host: str, port: int, public_key_hex: str):

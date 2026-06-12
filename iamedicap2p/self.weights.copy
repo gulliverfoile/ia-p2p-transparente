@@ -1,0 +1,6 @@
+self.lr_weights = config['agent'].get('lr_weights', 0.005)
+        self.cost_change_penalty = config['agent'].get('cost_change_penalty', 0.05)
+        self.historical_performance = []
+        self.cold_start_episodes = config['agent'].get('cold_start_episodes', 5)
+        self.episode_count = 0
+        self.step_counter = 0

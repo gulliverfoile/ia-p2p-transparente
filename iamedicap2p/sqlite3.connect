@@ -1,0 +1,5 @@
+conn.execute(
+            "INSERT INTO eventos (timestamp, tipo, datos, hash, hash_anterior, firma) VALUES (?, ?, ?, ?, ?, ?)",
+            (datetime.utcnow().isoformat(), tipo, json.dumps(datos, default=str),
+             nuevo_hash, self.last_hash, firma)
+        )

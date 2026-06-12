@@ -1,0 +1,12 @@
+avg_reward = sum(rewards) / len(rewards)
+        hazard_count = sum(1 for s in bucket if 'harm' in s)
+        hazard_risk = hazard_count / total if total > 0 else 0.0
+        return next_state, avg_reward, hazard_risk
+
+    def get_model_data(self) -> Dict:
+        trans = {f"{s}|{a}": dict(bucket) for (s, a), bucket in self.transitions.items()}
+        rew = {f"{s}|{a}": rewards for (s, a), rewards in self.rewards.items()}
+        return {
+            'transitions': trans,
+            'rewards': rew,
+            'state_counts': dict(self.state_counts),

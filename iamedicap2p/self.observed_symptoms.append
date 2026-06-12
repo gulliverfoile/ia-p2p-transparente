@@ -1,0 +1,76 @@
+self.tests_done = []
+        self.diagnosis_made = None
+        self.steps = 0
+        self._harm_occurred = False
+
+        # NUEVO: historial de observaciones (cada elemento es un dict con síntomas y pruebas)
+        self.history = deque(maxlen=self.history_window)
+        self._push_history()   # guarda el estado inicial
+
+        return self._get_obs()
+
+    def _get_obs(self) -> Dict:
+        """Observación actual (sin historial, solo el momento presente)."""
+        return {
+            'symptoms': self.observed_symptoms.copy(),
+            'tests_done': self.tests_done.copy(),
+            'diagnosis': self.diagnosis_made,
+            'step': self.steps,
+            'harm_occurred': self._harm_occurred
+        }
+
+    def _push_history(self):
+        """Añade la observación actual al historial."""
+        obs = self._get_obs()
+        # Guardamos una copia simplificada: solo sets de síntomas y pruebas
+        self.history.append({
+            'symptoms': set(obs['symptoms']),
+            'tests': set(obs['tests_done'])
+        })
+
+    def get_state_repr(self, obs: Dict) -> str:
+        """
+        Representación del estado que incluye el flujo temporal.
+        Se codifica:
+        - síntomas actuales (ordenados)
+        - pruebas actuales (ordenadas)
+        - tendencias: para cada síntoma, si apareció, desapareció o se mantuvo
+        - daño ocurrido
+        """
+        # Estado actual
+        current_symptoms = set(obs['symptoms'])
+        current_tests = set(obs['tests_done'])
+        harm = 'harm' if obs.get('harm_occurred', False) else ''
+
+        # Calcular tendencias si hay historial
+        trends = []
+        if len(self.history) >= 2:
+            prev = self.history[-2]
+            for sym in current_symptoms:
+                if sym not in prev['symptoms']:
+                    trends.append(f"{sym}+")   # apareció
+            for sym in prev['symptoms']:
+                if sym not in current_symptoms:
+                    trends.append(f"{sym}-")   # desapareció
+        # Para síntomas que se mantienen no añadimos nada (ahorra espacio)
+        trend_str = ','.join(sorted(trends))
+
+        # Construir representación
+        sym_str = ','.join(sorted(current_symptoms))
+        test_str = ','.join(sorted(current_tests))
+        # Incluimos también la longitud del historial para dar contexto
+        return f"s:{sym_str}|t:{test_str}|tr:{trend_str}|h:{harm}|histlen:{len(self.history)}"
+
+    def step(self, action: str) -> Tuple[Dict, float, bool, dict]:
+        self.steps += 1
+        reward = 0.0
+        info = {}
+        done = False
+
+        if action.startswith('predict_'):
+            disease_name = action.split('_', 1)[1]
+            if disease_name == self.true_disease['name']:
+                reward = self.rewards['correct_diagnosis']
+                info['correct'] = True
+            else:
+                reward = self.rewards['wrong_diagnosis']

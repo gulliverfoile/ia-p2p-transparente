@@ -1,0 +1,3 @@
+self.logger = setup_logger(agent_id)
+
+        # Claves Ed25519

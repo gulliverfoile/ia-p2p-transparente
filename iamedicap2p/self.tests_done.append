@@ -1,0 +1,13 @@
+info['test_result'] = 'done'
+        else:
+            reward = -1.0
+
+        if self.steps >= self.max_steps and not done:
+            reward -= 5.0
+            done = True
+
+        # Actualizar historial después del paso
+        obs = self._get_obs()
+        self._push_history()
+
+        return obs, reward, done, info

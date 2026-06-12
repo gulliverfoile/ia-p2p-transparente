@@ -1,0 +1,5 @@
+avg_score = float(np.mean(scores))
+            pred_next, pred_reward, hazard_risk = model.predict_next(state_repr, action)
+            if pred_next is None:
+                pred_reward = 0.0
+                hazard_risk = 0.1
