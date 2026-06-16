@@ -1,0 +1,475 @@
+import numpy as np
+from typing import List, Callable, Dict, Any, Optional
+from collections import deque
+import logging
+from dataclasses import dataclass
+import time
+
+# =========================
+# Configuración y Tipos
+# =========================
+@dataclass
+class MemoryItem:
+    value: Any
+    timestamp: float
+    node_id: int
+    fitness: float
+    tags: List[str]
+
+class DeepStrategicNode:
+    def __init__(self, node_id: int, dimensions: int, search_space: tuple):
+        self.node_id = node_id
+        self.dimensions = dimensions
+        self.search_space = search_space
+        
+        # Estado interno
+        self.position = np.random.uniform(search_space[0], search_space[1], dimensions)
+        self.velocity = np.zeros(dimensions)
+        self.personal_best = self.position.copy()
+        self.personal_best_fitness = float('inf')
+        
+        # Sistema de memoria mejorado
+        self.local_memory: Dict[str, MemoryItem] = {}
+        self.experience_buffer: deque = deque(maxlen=50)
+        
+        # Módulos y estado cognitivo
+        self.active_modules = {
+            'strategic_planning': True,
+            'ethical_filter': True, 
+            'social_learning': True,
+            'meta_cognition': False
+        }
+        
+        # Estado interno rico
+        self.confidence = 0.5
+        self.curiosity = 0.7
+        self.specialization = np.random.dirichlet(np.ones(3))  # [exploration, exploitation, social]
+        
+        # Tracking avanzado
+        self.fitness_history: List[float] = []
+        self.entropy_history: List[float] = []
+        self.decision_log: List[Dict] = []
+
+    # ---------- Sistema de Memoria Mejorado ----------
+    def store_experience(self, context: str, outcome: float, metadata: Dict = None):
+        """Almacenar experiencia con contexto rico"""
+        experience = {
+            'context': context,
+            'position': self.position.copy(),
+            'outcome': outcome,
+            'timestamp': time.time(),
+            'node_id': self.node_id,
+            'confidence': self.confidence,
+            'metadata': metadata or {}
+        }
+        self.experience_buffer.append(experience)
+
+    def get_relevant_experiences(self, current_context: str, max_results: int = 5) -> List[Dict]:
+        """Recuperar experiencias relevantes al contexto actual"""
+        relevant = []
+        for exp in reversed(self.experience_buffer):  # Más recientes primero
+            if (exp['context'] == current_context or 
+                any(tag in exp.get('metadata', {}).get('tags', []) for tag in current_context.split('_'))):
+                relevant.append(exp)
+            if len(relevant) >= max_results:
+                break
+        return relevant
+
+    def learn_from_experiences(self, context: str):
+        """Aprender de experiencias pasadas"""
+        relevant_experiences = self.get_relevant_experiences(context)
+        if not relevant_experiences:
+            return
+            
+        # Calcular tendencias de éxito
+        successes = [exp for exp in relevant_experiences if exp['outcome'] > 0]
+        failures = [exp for exp in relevant_experiences if exp['outcome'] <= 0]
+        
+        success_rate = len(successes) / len(relevant_experiences) if relevant_experiences else 0.5
+        
+        # Ajustar confianza basado en historial
+        self.confidence = np.clip(success_rate, 0.1, 0.9)
+        
+        # Aprender de patrones exitosos
+        if successes:
+            successful_positions = [exp['position'] for exp in successes]
+            successful_strategy = np.mean(successful_positions, axis=0)
+            self.local_memory['successful_pattern'] = successful_strategy
+
+    # ---------- Planificación Estratégica Profunda ----------
+    def plan_next_move(self, global_best: np.ndarray, global_memory: Dict[str, Any], 
+                      objective_function: Callable, horizon: int = 3, n_scenarios: int = 5) -> np.ndarray:
+        """Planificación estratégica que usa la función objetivo real"""
+        if not self.active_modules.get('strategic_planning', True):
+            return self.position
+        
+        best_scenario_score = float('inf')
+        best_first_step = None
+        planning_context = f"planning_horizon_{horizon}"
+        
+        # Consultar memoria global para guía
+        global_guidance = global_memory.get('collective_guidance', np.zeros(self.dimensions))
+        historical_success = global_memory.get('historical_success_patterns', [])
+        
+        for scenario_idx in range(n_scenarios):
+            current_trajectory = [self.position.copy()]
+            scenario_score = 0.0
+            scenario_viable = True
+            
+            for step in range(horizon):
+                # Base: componentes PSO estándar
+                cognitive = self.personal_best - current_trajectory[-1]
+                social = global_best - current_trajectory[-1]
+                
+                # Componente estratégico basado en memoria
+                strategic_component = np.zeros_like(current_trajectory[-1])
+                if historical_success:
+                    # Promedio de patrones exitosos históricos
+                    strategic_component = np.mean(historical_success, axis=0) - current_trajectory[-1]
+                
+                # Componente de exploración guiada
+                exploration = np.random.normal(0, 0.1 + 0.1 * self.curiosity, self.dimensions)
+                
+                # Combinación ponderada por especialización del nodo
+                step_move = (
+                    self.specialization[0] * exploration +  # Exploración
+                    self.specialization[1] * (0.4 * cognitive + 0.3 * strategic_component) +  # Explotación
+                    self.specialization[2] * (0.3 * social + 0.3 * global_guidance)  # Social
+                )
+                
+                next_position = current_trajectory[-1] + step_move
+                next_position = np.clip(next_position, *self.search_space)
+                current_trajectory.append(next_position)
+                
+                # Evaluar con función objetivo REAL
+                step_fitness = objective_function(next_position)
+                scenario_score += step_fitness / (step + 1)  # Descuento temporal
+                
+                # Verificación ética si está activa
+                if self.active_modules.get('ethical_filter', False):
+                    if not self._ethical_evaluation(next_position, objective_function):
+                        scenario_viable = False
+                        break
+            
+            if scenario_viable and scenario_score < best_scenario_score:
+                best_scenario_score = scenario_score
+                best_first_step = current_trajectory[1]  # Primer paso después de la posición actual
+        
+        # Aprender de la sesión de planificación
+        planning_success = best_first_step is not None
+        outcome = 1.0 if planning_success else -1.0
+        self.store_experience(planning_context, outcome, {
+            'tags': ['planning', 'success' if planning_success else 'failure'],
+            'horizon': horizon,
+            'scenarios_evaluated': n_scenarios
+        })
+        
+        return best_first_step if best_first_step is not None else self.position
+
+    def _ethical_evaluation(self, position: np.ndarray, objective_function: Callable) -> bool:
+        """Evaluación ética de una posición candidata"""
+        # 1. Verificar validez numérica
+        if np.any(np.isnan(position)) or np.any(np.isinf(position)):
+            return False
+        
+        # 2. Verificar dentro de límites razonables
+        if np.any(np.abs(position) > 10 * np.abs(self.search_space[1])):
+            return False
+            
+        # 3. Evaluar función objetivo (no debería dar resultados extremos)
+        try:
+            fitness = objective_function(position)
+            if np.isnan(fitness) or np.isinf(fitness):
+                return False
+            # Rechazar mejoras demasiado buenas (posible error)
+            if fitness < -1e10:  # Demasiado bueno para ser verdad
+                return False
+        except:
+            return False
+            
+        return True
+
+    # ---------- Actualización Integral ----------
+    def update(self, global_best: np.ndarray, objective_function: Callable, 
+               global_memory: Dict[str, Any], population_diversity: float):
+        """Actualización completa con todos los sistemas integrados"""
+        
+        # 1. Aprendizaje previo basado en contexto actual
+        current_context = f"update_diversity_{population_diversity:.2f}"
+        self.learn_from_experiences(current_context)
+        
+        # 2. Planificación estratégica
+        strategic_target = self.plan_next_move(global_best, global_memory, objective_function)
+        
+        # 3. Cálculo de movimiento
+        cognitive = self.personal_best - self.position
+        social = global_best - self.position
+        
+        # Pesos adaptativos basados en confianza y especialización
+        strategic_weight = 0.4 * (1.0 - self.confidence)  # Más estratégico cuando menos confiado
+        cognitive_weight = 0.3 * self.confidence
+        social_weight = 0.3 * self.specialization[2]  # Componente social
+        
+        r1, r2 = np.random.random(2)
+        strategic_component = strategic_target - self.position
+        
+        self.velocity = (
+            0.729 * self.velocity +
+            strategic_weight * strategic_component +
+            cognitive_weight * r1 * cognitive +
+            social_weight * r2 * social
+        )
+        
+        # 4. Aplicar movimiento
+        old_position = self.position.copy()
+        old_fitness = self.personal_best_fitness
+        
+        self.position += self.velocity
+        self.position = np.clip(self.position, *self.search_space)
+        
+        # 5. Evaluación y actualización
+        current_fitness = objective_function(self.position)
+        
+        if current_fitness < self.personal_best_fitness:
+            self.personal_best = self.position.copy()
+            self.personal_best_fitness = current_fitness
+            improvement = old_fitness - current_fitness
+            
+            # Registrar éxito
+            self.store_experience("successful_update", improvement, {
+                'tags': ['improvement', 'personal_best'],
+                'improvement_amount': improvement
+            })
+            
+            # Reforzar confianza
+            self.confidence = np.clip(self.confidence + 0.05, 0.1, 0.95)
+        else:
+            # Aprendizaje por refuerzo negativo
+            self.confidence = np.clip(self.confidence - 0.02, 0.1, 0.95)
+        
+        # 6. Meta-cognición y auto-ajuste
+        if self.active_modules.get('meta_cognition', False):
+            self._meta_cognitive_update(current_fitness, population_diversity)
+        
+        # 7. Tracking
+        self.fitness_history.append(current_fitness)
+        
+        # 8. Contribuir a memoria global
+        self._contribute_to_global_memory(global_memory, current_fitness)
+
+    def _meta_cognitive_update(self, current_fitness: float, population_diversity: float):
+        """Auto-reflexión y ajuste de estrategia"""
+        if len(self.fitness_history) < 10:
+            return
+            
+        # Analizar tendencia reciente
+        recent_fitness = self.fitness_history[-10:]
+        improvement_trend = np.polyfit(range(10), recent_fitness, 1)[0]
+        
+        # Ajustar especialización basado en desempeño
+        if improvement_trend < -0.01:  # Mejorando
+            # Reducir exploración, aumentar explotación
+            self.specialization[0] *= 0.9  # Exploración
+            self.specialization[1] *= 1.1  # Explotación
+        elif improvement_trend > 0.01:  # Empeorando
+            # Aumentar exploración
+            self.specialization[0] *= 1.2
+            self.specialization[1] *= 0.8
+        
+        # Normalizar especialización
+        self.specialization = self.specialization / np.sum(self.specialization)
+        
+        # Ajustar curiosidad basado en diversidad
+        if population_diversity < 0.1:  # Poca diversidad
+            self.curiosity = np.clip(self.curiosity + 0.1, 0.3, 0.9)
+        else:  # Alta diversidad
+            self.curiosity = np.clip(self.curiosity - 0.05, 0.1, 0.7)
+
+    def _contribute_to_global_memory(self, global_memory: Dict[str, Any], current_fitness: float):
+        """Contribuir información valiosa a la memoria global"""
+        if current_fitness < self.personal_best_fitness * 1.1:  # Solución prometedora
+            if 'promising_positions' not in global_memory:
+                global_memory['promising_positions'] = []
+            
+            global_memory['promising_positions'].append({
+                'position': self.position.copy(),
+                'fitness': current_fitness,
+                'node_id': self.node_id,
+                'timestamp': time.time()
+            })
+            
+            # Mantener solo las 10 más prometedoras
+            global_memory['promising_positions'].sort(key=lambda x: x['fitness'])
+            global_memory['promising_positions'] = global_memory['promising_positions'][:10]
+
+# =========================
+# Sistema Colectivo Inteligente
+# =========================
+class CollectiveIntelligentSwarm:
+    def __init__(self, num_nodes: int, dimensions: int, search_space: tuple, 
+                 objective_function: Callable):
+        self.nodes = [DeepStrategicNode(i, dimensions, search_space) for i in range(num_nodes)]
+        self.objective_function = objective_function
+        self.num_nodes = num_nodes
+        self.dimensions = dimensions
+        self.search_space = search_space
+        
+        # Estado global mejorado
+        self.global_best = None
+        self.global_best_fitness = float('inf')
+        
+        # Memoria colectiva robusta
+        self.collective_memory = {
+            'historical_bests': [],
+            'promising_positions': [],
+            'collective_guidance': np.zeros(dimensions),
+            'performance_trends': [],
+            'diversity_history': []
+        }
+        
+        self.convergence_history = []
+        self.iteration = 0
+        
+        self._initialize_swarm()
+
+    def _initialize_swarm(self):
+        """Inicialización con diversidad garantizada"""
+        # Distribuir nodos en diferentes regiones del espacio de búsqueda
+        for i, node in enumerate(self.nodes):
+            if i == 0:
+                # Nodo explorador (bordes del espacio)
+                node.position = np.random.uniform(
+                    self.search_space[0] * 0.8, 
+                    self.search_space[1] * 0.8, 
+                    self.dimensions
+                )
+            elif i == 1:
+                # Nodo centrado
+                node.position = np.zeros(self.dimensions)
+            else:
+                # Distribución normal
+                node.position = np.random.uniform(*self.search_space, self.dimensions)
+            
+            fitness = self.objective_function(node.position)
+            if fitness < self.global_best_fitness:
+                self.global_best = node.position.copy()
+                self.global_best_fitness = fitness
+
+    def calculate_population_diversity(self) -> float:
+        """Calcular diversidad de la población"""
+        positions = np.array([node.position for node in self.nodes])
+        centroid = np.mean(positions, axis=0)
+        distances = np.linalg.norm(positions - centroid, axis=1)
+        return float(np.mean(distances))
+
+    def update_collective_memory(self):
+        """Actualizar memoria colectiva basada en estado actual"""
+        # 1. Actualizar guía colectiva
+        promising_positions = self.collective_memory.get('promising_positions', [])
+        if promising_positions:
+            best_positions = [item['position'] for item in promising_positions[:5]]
+            self.collective_memory['collective_guidance'] = np.mean(best_positions, axis=0)
+        
+        # 2. Mantener historial de mejores soluciones
+        self.collective_memory['historical_bests'].append({
+            'position': self.global_best.copy(),
+            'fitness': self.global_best_fitness,
+            'iteration': self.iteration
+        })
+        
+        # Limitar tamaño del historial
+        if len(self.collective_memory['historical_bests']) > 20:
+            self.collective_memory['historical_bests'] = self.collective_memory['historical_bests'][-20:]
+        
+        # 3. Calcular tendencias de desempeño
+        if len(self.convergence_history) >= 10:
+            recent_trend = np.polyfit(range(10), self.convergence_history[-10:], 1)[0]
+            self.collective_memory['performance_trends'].append(recent_trend)
+
+    def step(self):
+        """Un paso de evolución del enjambre"""
+        self.iteration += 1
+        
+        # Calcular diversidad actual
+        current_diversity = self.calculate_population_diversity()
+        self.collective_memory['diversity_history'].append(current_diversity)
+        
+        # Actualizar todos los nodos
+        for node in self.nodes:
+            node.update(
+                self.global_best, 
+                self.objective_function, 
+                self.collective_memory,
+                current_diversity
+            )
+        
+        # Actualizar mejor global (EVITANDO evaluaciones redundantes)
+        for node in self.nodes:
+            if node.personal_best_fitness < self.global_best_fitness:
+                self.global_best = node.personal_best.copy()
+                self.global_best_fitness = node.personal_best_fitness
+        
+        # Actualizar memoria colectiva
+        self.update_collective_memory()
+        
+        # Registrar convergencia
+        self.convergence_history.append(self.global_best_fitness)
+        
+        # Logging
+        if self.iteration % 10 == 0:
+            logging.info(
+                f"Iteration {self.iteration}: Best = {self.global_best_fitness:.6f}, "
+                f"Diversity = {current_diversity:.4f}, "
+                f"Active Nodes = {len(self.nodes)}"
+            )
+
+    def run(self, iterations: int):
+        """Ejecutar el sistema completo"""
+        logging.info(f"🧠 Starting Collective Intelligent Swarm with {self.num_nodes} nodes")
+        
+        for i in range(iterations):
+            self.step()
+        
+        logging.info("✅ Optimization completed")
+        
+        # Análisis final
+        self._analyze_performance()
+
+    def _analyze_performance(self):
+        """Análisis de desempeño del sistema"""
+        print(f"\n📊 COLLECTIVE SWARM PERFORMANCE ANALYSIS")
+        print(f"===========================================")
+        print(f"Final Best Fitness: {self.global_best_fitness:.10f}")
+        print(f"Total Iterations: {self.iteration}")
+        print(f"Final Diversity: {self.collective_memory['diversity_history'][-1]:.4f}")
+        print(f"Collective Memory Size: {len(self.collective_memory['historical_bests'])}")
+        print(f"Best Solution: {self.global_best}")
+
+# =========================
+# Ejemplo de Uso
+# =========================
+def sphere_function(x: np.ndarray) -> float:
+    return float(np.sum(x**2))
+
+def rastrigin_function(x: np.ndarray) -> float:
+    A = 10
+    n = len(x)
+    return float(A * n + np.sum(x**2 - A * np.cos(2 * np.pi * x)))
+
+if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
+    
+    # Crear sistema colectivo inteligente
+    swarm = CollectiveIntelligentSwarm(
+        num_nodes=8,
+        dimensions=5,
+        search_space=(-5.12, 5.12),
+        objective_function=sphere_function
+    )
+    
+    # Configurar algunos nodos especializados
+    swarm.nodes[0].active_modules['meta_cognition'] = True  # Nodo meta-cognitivo
+    swarm.nodes[1].specialization = np.array([0.7, 0.2, 0.1])  # Nodo explorador
+    
+    # Ejecutar
+    swarm.run(iterations=100)
