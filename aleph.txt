@@ -1,0 +1,766 @@
+from abc import ABC, abstractmethod
+from typing import Any, Dict, List, Optional, Tuple
+import numpy as np
+import time
+from dataclasses import dataclass
+from enum import Enum
+import logging
+from collections import defaultdict, deque
+import random
+
+# ============================================
+# NÚCLEO ALEPHICO
+# ============================================
+
+class EmergenceType(Enum):
+    SELF_ORGANIZATION = "self_organization"
+    COLLECTIVE_BEHAVIOR = "collective_behavior"
+    META_LEARNING = "meta_learning"
+    ADAPTIVE_REORGANIZATION = "adaptive_reorganization"
+    CROSS_MODAL_SYNERGY = "cross_modal_synergy"
+
+@dataclass
+class AlephicInsight:
+    description: str
+    confidence: float
+    context: Dict[str, Any]
+    emergence_type: EmergenceType
+    timestamp: float
+    evidence: List[Any]
+
+class AlephicAwareness:
+    """Conciencia recursiva del sistema sobre sí mismo"""
+    
+    def __init__(self, host_component, max_recursion_depth: int = 3):
+        self.host = host_component
+        self.max_recursion_depth = max_recursion_depth
+        self.insight_history = deque(maxlen=1000)
+        self.emergence_patterns = defaultdict(list)
+        self.recursion_level = 0
+        
+    def perceive_with_awareness(self, context: Contexto) -> Dict[str, Any]:
+        """Percepción que incluye múltiples niveles de conciencia"""
+        perceptions = []
+        
+        for depth in range(self.max_recursion_depth):
+            try:
+                perception = self._perceive_at_depth(context, depth)
+                perceptions.append(perception)
+                
+                # Detectar insights entre niveles de percepción
+                if depth > 0:
+                    insights = self._detect_inter_level_insights(
+                        perceptions[depth-1], perception, depth
+                    )
+                    self.insight_history.extend(insights)
+                    
+            except RecursionError:
+                break
+        
+        return self._synthesize_perceptions(perceptions)
+    
+    def _perceive_at_depth(self, context: Contexto, depth: int) -> Dict[str, Any]:
+        """Percepción a un nivel específico de recursión"""
+        if depth == 0:
+            # Nivel base: percepción normal
+            return self.host.base_perception(context)
+        else:
+            # Niveles superiores: percepción de la percepción
+            lower_perception = self._perceive_at_depth(context, depth - 1)
+            return {
+                'depth': depth,
+                'lower_perception': lower_perception,
+                'perception_quality': self._assess_perception_quality(lower_perception),
+                'biases_detected': self._detect_biases(lower_perception),
+                'complementary_perspectives': self._suggest_complementary_perspectives(lower_perception)
+            }
+    
+    def _detect_inter_level_insights(self, lower_perception: Dict, 
+                                   higher_perception: Dict, depth: int) -> List[AlephicInsight]:
+        """Detecta insights que emergen entre niveles de percepción"""
+        insights = []
+        
+        # Detectar contradicciones reveladoras
+        contradictions = self._find_inter_level_contradictions(lower_perception, higher_perception)
+        for cont in contradictions:
+            insights.append(AlephicInsight(
+                description=f"Contradicción reveladora en nivel {depth}: {cont}",
+                confidence=0.85,
+                context={'depth': depth, 'type': 'contradiction'},
+                emergence_type=EmergenceType.META_LEARNING,
+                timestamp=time.time(),
+                evidence=[lower_perception, higher_perception]
+            ))
+        
+        # Detectar patrones recursivos
+        patterns = self._find_recursive_patterns(lower_perception, higher_perception)
+        for pattern in patterns:
+            insights.append(AlephicInsight(
+                description=f"Patrón recursivo detectado: {pattern}",
+                confidence=0.92,
+                context={'depth': depth, 'type': 'recursive_pattern'},
+                emergence_type=EmergenceType.SELF_ORGANIZATION,
+                timestamp=time.time(),
+                evidence=[lower_perception, higher_perception]
+            ))
+        
+        return insights
+    
+    def _synthesize_perceptions(self, perceptions: List[Dict]) -> Dict[str, Any]:
+        """Sintetiza todos los niveles de percepción en una visión unificada"""
+        if not perceptions:
+            return {}
+        
+        base_perception = perceptions[0]
+        alephic_enrichment = {
+            'multi_level_awareness': True,
+            'perception_depth': len(perceptions),
+            'insights_generated': len(self.insight_history),
+            'recent_insights': list(self.insight_history)[-5:],  # Últimos 5 insights
+            'emergence_catalog': dict(self.emergence_patterns),
+            'system_self_understanding': self._generate_self_understanding()
+        }
+        
+        return {**base_perception, **alephic_enrichment}
+
+# ============================================
+# MÓDULOS ALEPHICOS
+# ============================================
+
+class AlephicSpecializedModule(SpecializedModule):
+    """Módulo especializado con conciencia Alephica"""
+    
+    def __init__(self, module_type: str):
+        super().__init__()
+        self.module_type = module_type
+        self.alephic_awareness = AlephicAwareness(self)
+        self.self_knowledge = self._initialize_self_knowledge()
+        
+    def _initialize_self_knowledge(self) -> Dict[str, Any]:
+        """Conocimiento innato sobre sus propias capacidades y limitaciones"""
+        return {
+            'my_strengths': self._define_strengths(),
+            'my_limitations': self._define_limitations(),
+            'my_ideal_conditions': self._define_ideal_conditions(),
+            'complementary_modules': self._define_complementary_modules(),
+            'emergence_triggers': self._define_emergence_triggers()
+        }
+    
+    def alephic_process(self, input_data: Any, context: Contexto, 
+                       system_state: Dict) -> Dict[str, Any]:
+        """Procesamiento con conciencia del sistema completo"""
+        
+        # 1. Auto-evaluación de capacidades para este input específico
+        capability_assessment = self.assess_capability(input_data, context)
+        
+        # 2. Evaluación del estado del sistema
+        system_readiness = self.assess_system_readiness(system_state)
+        
+        # 3. Decisión consciente sobre participación
+        participation_decision = self.decide_participation_level(
+            capability_assessment, system_readiness, context
+        )
+        
+        if participation_decision['should_process']:
+            # Procesar con conciencia del rol sistémico
+            result = self.process(input_data, context)
+            enriched_result = self.enrich_with_system_awareness(result, system_state)
+        else:
+            # Delegar o contribuir parcialmente
+            enriched_result = self.provide_partial_contribution(
+                capability_assessment, system_state
+            )
+        
+        # 4. Añadir metadatos alephicos
+        alephic_metadata = {
+            'participation_decision': participation_decision,
+            'capability_assessment': capability_assessment,
+            'system_context_used': system_state,
+            'emergence_potential': self.assess_emergence_potential(enriched_result, system_state)
+        }
+        
+        return {**enriched_result, **alephic_metadata}
+    
+    def assess_emergence_potential(self, result: Dict, system_state: Dict) -> Dict[str, Any]:
+        """Evalúa el potencial de propiedades emergentes al combinar con otros módulos"""
+        emergence_potential = {}
+        
+        for other_module, state in system_state.get('module_states', {}).items():
+            if other_module != self.module_type and state.get('active', False):
+                synergy = self.calculate_synergy_potential(result, state)
+                if synergy > 0.7:  # Umbral alto para sinergia significativa
+                    emergence_potential[other_module] = {
+                        'synergy_score': synergy,
+                        'predicted_emergence': self.predict_emergence_type(result, state),
+                        'recommended_integration': self.suggest_integration_strategy(result, state)
+                    }
+        
+        return emergence_potential
+
+class AlephicVisionModule(AlephicSpecializedModule, VisionModule):
+    """Módulo de visión con conciencia Alephica"""
+    
+    def __init__(self, model_type: str = "efficientnet"):
+        VisionModule.__init__(self, model_type)
+        AlephicSpecializedModule.__init__(self, "vision")
+    
+    def _define_strengths(self):
+        return ["pattern_recognition", "spatial_analysis", "object_detection", "texture_analysis"]
+    
+    def _define_limitations(self):
+        return ["context_understanding", "temporal_reasoning", "abstract_concepts"]
+    
+    def _define_ideal_conditions(self):
+        return ["high_contrast_images", "consistent_lighting", "clear_focus"]
+    
+    def _define_complementary_modules(self):
+        return ["language", "temporal", "contextual"]
+    
+    def _define_emergence_triggers(self):
+        return {
+            "with_language": "scene_understanding",
+            "with_temporal": "motion_analysis", 
+            "with_contextual": "situational_awareness"
+        }
+    
+    def process(self, image_data: Any, context: Contexto) -> Dict[str, Any]:
+        base_result = super().process(image_data, context)
+        
+        # Enriquecer con conciencia alephica
+        alephic_enrichment = {
+            'perspective_type': 'visual_spatial',
+            'dimensionality': '2D+color',
+            'temporal_aspect': 'static',
+            'known_interpretation_biases': [
+                'literal_interpretation',
+                'lighting_sensitivity', 
+                'scale_dependence'
+            ],
+            'suggested_complementary_processing': [
+                'linguistic_context_for_scene_understanding',
+                'temporal_analysis_for_dynamic_scenes',
+                'numerical_analysis_for_quantitative_aspects'
+            ]
+        }
+        
+        return {**base_result, **alephic_enrichment}
+
+class AlephicLanguageModule(AlephicSpecializedModule, LanguageModule):
+    """Módulo de lenguaje con conciencia Alephica"""
+    
+    def __init__(self, llm_backend: str = "local"):
+        LanguageModule.__init__(self, llm_backend)
+        AlephicSpecializedModule.__init__(self, "language")
+    
+    def _define_strengths(self):
+        return ["semantic_understanding", "intent_recognition", "context_interpretation", "abstraction"]
+    
+    def _define_limitations(self):
+        return ["spatial_reasoning", "quantitative_precision", "real_world_grounding"]
+    
+    def _define_ideal_conditions(self):
+        return ["clear_syntax", "explicit_intent", "sufficient_context"]
+    
+    def _define_complementary_modules(self):
+        return ["vision", "numerical", "knowledge"]
+    
+    def _define_emergence_triggers(self):
+        return {
+            "with_vision": "multimodal_understanding",
+            "with_numerical": "precise_specification",
+            "with_knowledge": "expert_reasoning"
+        }
+    
+    def process(self, text: str, context: Contexto) -> Dict[str, Any]:
+        base_result = super().process(text, context)
+        
+        alephic_enrichment = {
+            'perspective_type': 'semantic_symbolic',
+            'dimensionality': 'sequential_conceptual',
+            'temporal_aspect': 'implicit',
+            'known_interpretation_biases': [
+                'cultural_assumptions',
+                'literal_interpretation',
+                'context_dependence'
+            ],
+            'suggested_complementary_processing': [
+                'visual_grounding_for_concrete_concepts',
+                'numerical_precision_for_quantities',
+                'temporal_analysis_for_sequences'
+            ]
+        }
+        
+        return {**base_result, **alephic_enrichment}
+
+# ============================================
+# NODOS ALEPHICOS
+# ============================================
+
+class AlephicModularAdaptiveNode(ModularAdaptiveNode):
+    """Nodo con conciencia Alephica de su rol en el sistema colectivo"""
+    
+    def __init__(self, node_id: int, dimensions: int, search_space: tuple):
+        super().__init__(node_id, dimensions, search_space)
+        self.alephic_awareness = AlephicAwareness(self)
+        self.collective_memory = CollectiveMemory()
+        self.personal_insights = []
+        
+    def alephic_decision(self, problem_data: Dict, context: Contexto, 
+                        swarm_state: Dict) -> np.ndarray:
+        """Toma de decisiones con conciencia recursiva"""
+        
+        # Obtener múltiples perspectivas
+        perspectives = self.gather_multiple_perspectives(problem_data, context, swarm_state)
+        
+        # Sintetizar perspectiva alephica
+        alephic_synthesis = self.alephic_synthesis(perspectives, context)
+        
+        # Aplicar aprendizaje colectivo
+        collective_wisdom = self.apply_collective_wisdom(alephic_synthesis, swarm_state)
+        
+        # Generar insights del proceso
+        self.generate_decision_insights(perspectives, alephic_synthesis, collective_wisdom)
+        
+        return collective_wisdom
+    
+    def gather_multiple_perspectives(self, problem_data: Dict, context: Contexto,
+                                   swarm_state: Dict) -> Dict[str, np.ndarray]:
+        """Recolecta múltiples perspectivas sobre el problema"""
+        perspectives = {}
+        
+        # 1. Perspectiva individual (comportamiento base)
+        perspectives['individual'] = self.plan_next_move(
+            self.personal_best, {}, lambda x: 0
+        )
+        
+        # 2. Perspectiva multimodal (módulos especializados)
+        perspectives['multimodal'] = self.multi_modal_decision(problem_data, context)
+        
+        # 3. Perspectiva colectiva (conocimiento del swarm)
+        perspectives['collective'] = self.infer_collective_perspective(swarm_state)
+        
+        # 4. Perspectiva histórica (aprendizaje pasado)
+        perspectives['historical'] = self.apply_historical_knowledge(context)
+        
+        # 5. Perspectiva universal (patrones fundamentales)
+        perspectives['universal'] = self.apply_universal_patterns(context)
+        
+        return perspectives
+    
+    def alephic_synthesis(self, perspectives: Dict[str, np.ndarray], 
+                         context: Contexto) -> np.ndarray:
+        """Sintetiza múltiples perspectivas en una visión unificada"""
+        
+        # No es un promedio simple - es una integración inteligente
+        synthesis_weights = self.calculate_synthesis_weights(perspectives, context)
+        
+        # Aplicar transformación holográfica a cada perspectiva
+        holographic_perspectives = []
+        for perspective_name, perspective in perspectives.items():
+            transformed = self.holographic_transform(
+                perspective, perspectives, perspective_name
+            )
+            holographic_perspectives.append(transformed)
+        
+        # Combinación ponderada
+        synthesized = np.zeros_like(perspectives['individual'])
+        total_weight = 0
+        
+        for perspective, weight in zip(holographic_perspectives, synthesis_weights.values()):
+            # Asegurar dimensiones compatibles
+            if len(perspective) >= len(synthesized):
+                usable_part = perspective[:len(synthesized)]
+            else:
+                usable_part = np.pad(perspective, (0, len(synthesized) - len(perspective)))
+                
+            synthesized += weight * usable_part
+            total_weight += weight
+        
+        if total_weight > 0:
+            synthesized /= total_weight
+        
+        return synthesized
+    
+    def holographic_transform(self, perspective: np.ndarray, 
+                            all_perspectives: Dict[str, np.ndarray],
+                            current_perspective_name: str) -> np.ndarray:
+        """Transforma una perspectiva para contener información relacional"""
+        
+        # La perspectiva base
+        transformed = perspective.copy()
+        
+        # Añadir información sobre relaciones con otras perspectivas
+        relationship_vectors = []
+        for other_name, other_perspective in all_perspectives.items():
+            if other_name != current_perspective_name:
+                # Calcular vector de relación
+                relation = self.compute_relationship_vector(
+                    perspective, other_perspective, 
+                    current_perspective_name, other_name
+                )
+                relationship_vectors.append(relation)
+        
+        # Combinar todos los vectores de relación
+        if relationship_vectors:
+            avg_relationship = np.mean(relationship_vectors, axis=0)
+            # Añadir al final de la perspectiva transformada
+            transformed = np.concatenate([transformed, avg_relationship])
+        
+        return transformed
+    
+    def generate_decision_insights(self, perspectives: Dict, synthesis: np.ndarray,
+                                 final_decision: np.ndarray):
+        """Genera insights sobre el proceso de decisión"""
+        
+        # Analizar convergencia/divergencia entre perspectivas
+        convergence_analysis = self.analyze_perspective_convergence(perspectives)
+        
+        # Detectar patrones emergentes en la síntesis
+        emergence_detection = self.detect_decision_emergence(perspectives, synthesis)
+        
+        insight = AlephicInsight(
+            description=f"Nodo {self.node_id}: {emergence_detection['primary_insight']}",
+            confidence=emergence_detection['confidence'],
+            context={
+                'node_id': self.node_id,
+                'perspectives_used': list(perspectives.keys()),
+                'convergence_analysis': convergence_analysis
+            },
+            emergence_type=emergence_detection['emergence_type'],
+            timestamp=time.time(),
+            evidence=[perspectives, synthesis, final_decision]
+        )
+        
+        self.personal_insights.append(insight)
+        self.alephic_awareness.insight_history.append(insight)
+
+# ============================================
+# SWARM ALEPHICO
+# ============================================
+
+class CollectiveAlephicAwareness:
+    """Conciencia colectiva del swarm completo"""
+    
+    def __init__(self, swarm):
+        self.swarm = swarm
+        self.collective_insights = deque(maxlen=5000)
+        self.emergence_catalog = EmergenceCatalog()
+        self.system_self_model = SystemSelfModel()
+        
+    def observe_swarm_iteration(self, iteration: int, context: Contexto) -> List[AlephicInsight]:
+        """Observa y analiza una iteración completa del swarm"""
+        insights = []
+        
+        # 1. Análisis de comportamiento colectivo
+        collective_behavior = self.analyze_collective_behavior()
+        insights.extend(collective_behavior)
+        
+        # 2. Detección de emergencia
+        emergence_events = self.detect_emergence_events()
+        insights.extend(emergence_events)
+        
+        # 3. Análisis de evolución del sistema
+        system_evolution = self.analyze_system_evolution(iteration)
+        insights.extend(system_evolution)
+        
+        # 4. Meta-análisis del proceso de optimización
+        meta_optimization = self.meta_analyze_optimization(iteration, context)
+        insights.extend(meta_optimization)
+        
+        # Registrar insights colectivos
+        self.collective_insights.extend(insights)
+        self.emergence_catalog.record_insights(insights, iteration)
+        
+        return insights
+
+class AlephicModularNetworkedSwarm(ModularNetworkedSwarm):
+    """Swarm con conciencia Alephica colectiva"""
+    
+    def __init__(self, num_nodes: int, dimensions: int, search_space: tuple,
+                 objective_function: callable, topology: str = "small_world"):
+        
+        # Inicializar con nodos alephicos
+        self.num_nodes = num_nodes
+        self.dimensions = dimensions
+        self.search_space = search_space
+        self.objective_function = objective_function
+        self.iteration = 0
+        
+        # Crear nodos alephicos
+        self.nodes = [AlephicModularAdaptiveNode(i, dimensions, search_space) 
+                     for i in range(num_nodes)]
+        
+        self.topology = self._create_topology(topology)
+        self._initialize_global_best()
+        
+        # Sistema de conciencia alephica
+        self.collective_awareness = CollectiveAlephicAwareness(self)
+        self.emergence_history = []
+        self.system_insights = []
+        
+        # Módulos globales (se registrarán después)
+        self.global_modules = {}
+    
+    def solve_multimodal_problem(self, problem_data: Dict[str, Any], 
+                                context: Contexto, iterations: int = 100):
+        """Resolución de problemas con conciencia alephica completa"""
+        
+        process_insights = []
+        emergence_timeline = []
+        
+        for i in range(iterations):
+            self.iteration = i + 1
+            
+            # Estado del sistema para esta iteración
+            system_state = self.capture_system_state(problem_data, context)
+            
+            for node in self.nodes:
+                # Adaptación contextual con conciencia
+                node.contextual_adaptation(context)
+                
+                # Decisión alephica (con conocimiento del sistema completo)
+                next_position = node.alephic_decision(problem_data, context, system_state)
+                
+                # Actualizar posición
+                node.velocity = next_position - node.position
+                node.position = next_position
+                node.position = np.clip(node.position, *self.search_space)
+                
+                # Evaluar fitness
+                fitness = self.objective_function(node.position)
+                
+                if fitness < node.personal_best_fitness:
+                    node.personal_best = node.position.copy()
+                    node.personal_best_fitness = fitness
+                
+                if fitness < self.global_best_fitness:
+                    self.global_best = node.position.copy()
+                    self.global_best_fitness = fitness
+            
+            # Observación alephica de la iteración
+            iteration_insights = self.collective_awareness.observe_swarm_iteration(i, context)
+            process_insights.extend(iteration_insights)
+            
+            # Detectar y registrar eventos de emergencia
+            emergence_events = self.detect_emergence_events()
+            emergence_timeline.extend(emergence_events)
+            
+            if i % 10 == 0:
+                best_fitness = self.global_best_fitness
+                insight_count = len(process_insights)
+                emergence_count = len(emergence_events)
+                print(f"Iteración {i}: Fitness = {best_fitness:.6f}, "
+                      f"Insights = {insight_count}, Emergencias = {emergence_count}")
+        
+        # Compilar resultados finales con comprensión profunda
+        final_result = self.compile_alephic_results(process_insights, emergence_timeline)
+        
+        return final_result
+    
+    def compile_alephic_results(self, process_insights: List[AlephicInsight],
+                              emergence_timeline: List) -> Dict[str, Any]:
+        """Compila resultados con comprensión alephica del proceso"""
+        
+        return {
+            'optimal_solution': self.global_best.copy(),
+            'optimal_fitness': self.global_best_fitness,
+            'process_insights': process_insights,
+            'emergence_timeline': emergence_timeline,
+            'system_self_report': self.generate_system_self_report(),
+            'performance_analysis': self.analyze_performance(),
+            'learning_summary': self.summarize_learning(),
+            'recommendations': self.generate_recommendations(),
+            'emergence_catalog': self.collective_awareness.emergence_catalog.get_summary()
+        }
+    
+    def generate_system_self_report(self) -> Dict[str, Any]:
+        """Genera un reporte de auto-comprensión del sistema"""
+        return {
+            'system_identity': {
+                'type': 'AlephicModularSwarm',
+                'node_count': len(self.nodes),
+                'module_types': list(self.global_modules.keys()),
+                'dimensionality': self.dimensions,
+                'search_space': self.search_space
+            },
+            'collective_intelligence_metrics': {
+                'total_insights_generated': len(self.system_insights),
+                'emergence_events_detected': len(self.emergence_history),
+                'average_insight_confidence': np.mean([i.confidence for i in self.system_insights]) if self.system_insights else 0,
+                'system_self_understanding_score': self.calculate_self_understanding_score()
+            },
+            'key_discoveries': self.extract_key_discoveries(),
+            'system_limitations': self.identify_system_limitations(),
+            'evolution_trajectory': self.analyze_evolution_trajectory()
+        }
+
+# ============================================
+# CLASES DE SOPORTE ALEPHICO
+# ============================================
+
+class EmergenceCatalog:
+    """Cataloga y analiza eventos de emergencia"""
+    
+    def __init__(self):
+        self.emergence_events = []
+        self.pattern_frequency = defaultdict(int)
+        self.type_distribution = defaultdict(int)
+    
+    def record_insights(self, insights: List[AlephicInsight], iteration: int):
+        """Registra insights y detecta patrones de emergencia"""
+        for insight in insights:
+            self.emergence_events.append({
+                'insight': insight,
+                'iteration': iteration,
+                'timestamp': time.time()
+            })
+            
+            self.pattern_frequency[insight.description] += 1
+            self.type_distribution[insight.emergence_type] += 1
+    
+    def get_summary(self) -> Dict[str, Any]:
+        """Resumen del catálogo de emergencia"""
+        return {
+            'total_emergence_events': len(self.emergence_events),
+            'most_common_patterns': dict(sorted(self.pattern_frequency.items(), 
+                                              key=lambda x: x[1], reverse=True)[:10]),
+            'emergence_type_distribution': dict(self.type_distribution),
+            'recent_emergence': [e['insight'].description for e in self.emergence_events[-5:]]
+        }
+
+class CollectiveMemory:
+    """Memoria colectiva para el aprendizaje distribuido"""
+    
+    def __init__(self, max_size: int = 10000):
+        self.experience_buffer = deque(maxlen=max_size)
+        self.pattern_library = {}
+        self.solution_archetypes = []
+    
+    def store_experience(self, experience: Dict[str, Any]):
+        """Almacena una experiencia para aprendizaje futuro"""
+        self.experience_buffer.append(experience)
+        
+        # Extraer patrones si es significativo
+        if experience.get('significance', 0) > 0.8:
+            self.extract_patterns(experience)
+    
+    def extract_patterns(self, experience: Dict):
+        """Extrae patrones de experiencias significativas"""
+        # Implementar extracción de patrones aquí
+        pass
+
+class SystemSelfModel:
+    """Modelo interno del sistema sobre sí mismo"""
+    
+    def __init__(self):
+        self.self_knowledge = {
+            'capabilities': [],
+            'limitations': [],
+            'learning_patterns': [],
+            'optimization_biases': [],
+            'emergence_triggers': []
+        }
+        self.performance_model = {}
+        self.adaptation_strategies = []
+    
+    def update_self_model(self, new_knowledge: Dict[str, Any]):
+        """Actualiza el modelo interno basado en nueva experiencia"""
+        for category, knowledge in new_knowledge.items():
+            if category in self.self_knowledge:
+                self.self_knowledge[category].extend(knowledge)
+
+# ============================================
+# EJEMPLO DE USO COMPLETO
+# ============================================
+
+def demo_sistema_alephico_completo():
+    """Demostración del sistema Alephico completo en acción"""
+    
+    # Función objetivo compleja
+    def complex_objective(x: np.ndarray) -> float:
+        return np.sum(x**2) + 10 * np.sum(np.sin(5 * x)) + 5 * np.sum(np.cos(10 * x))
+    
+    # Crear swarm alephico
+    swarm = AlephicModularNetworkedSwarm(
+        num_nodes=15,
+        dimensions=8,
+        search_space=(-10, 10),
+        objective_function=complex_objective,
+        topology="small_world"
+    )
+    
+    # Registrar módulos alephicos
+    swarm.register_global_module("vision", AlephicVisionModule())
+    swarm.register_global_module("language", AlephicLanguageModule())
+    swarm.register_global_module("numerical", NumericalOptModule())
+    
+    # Configurar ontologías avanzadas
+    for node in swarm.nodes:
+        node.symbolic.add_concept("alephic_awareness", True)
+        node.symbolic.add_ontology_relation("vision", [
+            "spatial_reasoning", "pattern_recognition", "visual_abstraction"
+        ])
+        node.symbolic.add_ontology_relation("language", [
+            "semantic_analysis", "intent_extraction", "contextual_understanding"
+        ])
+        node.symbolic.add_concept("emergence_detection", True)
+    
+    # Datos de problema multimodal
+    problem_data = {
+        "vision": np.random.randn(224, 224, 3),
+        "language": "Find optimal configuration balancing exploration and exploitation",
+        "numerical": complex_objective
+    }
+    
+    # Contexto enriquecido
+    context = EnhancedContexto(
+        tipo_problema="complex_multimodal_optimization",
+        urgencia=0.7,
+        riesgo=0.5,
+        complexity=0.9,
+        alephic_awareness=True
+    )
+    
+    print("🚀 INICIANDO SISTEMA ALEPHICO...")
+    print("🌌 Activando conciencia recursiva...")
+    print("🔍 Iniciando observación meta-cognitiva...")
+    
+    # Ejecutar optimización alephica
+    start_time = time.time()
+    results = swarm.solve_multimodal_problem(problem_data, context, iterations=80)
+    execution_time = time.time() - start_time
+    
+    # Mostrar resultados enriquecidos
+    print(f"\n🎯 OPTIMIZACIÓN ALEPHICA COMPLETADA")
+    print(f"⏱️  Tiempo ejecución: {execution_time:.2f}s")
+    print(f"📊 Mejor fitness: {results['optimal_fitness']:.6f}")
+    print(f"🧠 Insights generados: {len(results['process_insights'])}")
+    print(f"🌌 Eventos de emergencia: {len(results['emergence_timeline'])}")
+    
+    # Mostrar insights clave
+    print(f"\n💡 INSIGHTS CLAVE DEL SISTEMA:")
+    key_insights = [i for i in results['process_insights'] if i.confidence > 0.9]
+    for i, insight in enumerate(key_insights[:3]):
+        print(f"   {i+1}. {insight.description} (conf: {insight.confidence:.2f})")
+    
+    # Mostrar auto-comprensión del sistema
+    self_report = results['system_self_report']
+    print(f"\n🤖 AUTO-COMPRENSIÓN DEL SISTEMA:")
+    print(f"   - Score auto-comprensión: {self_report['collective_intelligence_metrics']['system_self_understanding_score']:.2f}")
+    print(f"   - Tipos de emergencia detectados: {len(self_report['collective_intelligence_metrics']['emergence_events_detected'])}")
+    
+    # Mostrar recomendaciones
+    print(f"\n📋 RECOMENDACIONES DEL SISTEMA:")
+    for i, rec in enumerate(results['recommendations'][:3]):
+        print(f"   {i+1}. {rec}")
+    
+    return results
+
+# Ejecutar la demostración
+if __name__ == "__main__":
+    resultados = demo_sistema_alephico_completo()
+    
+    # Análisis adicional opcional
+    print(f"\n📈 ANÁLISIS ADICIONAL:")
+    print(f"   - Solución óptima: {resultados['optimal_solution']}")
+    print(f"   - Efectividad alephica: {resultados['performance_analysis'].get('alephic_efficiency', 'N/A')}")
