@@ -1,0 +1,1132 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Motor de Filtrado Genérico · Hexagonal · Eventos · Sin reglas fijas</title>
+  <style>
+    /* ========== ESTILOS BÁSICOS ========== */
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    body {
+      font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+      background: #f0f2f5;
+      padding: 20px;
+      color: #1e293b;
+    }
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+    header {
+      background: white;
+      padding: 1.5rem;
+      border-radius: 12px;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+      margin-bottom: 1.5rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    h1 {
+      font-size: 1.8rem;
+      margin-bottom: 0.25rem;
+    }
+    .subtitle {
+      color: #64748b;
+      font-size: 0.95rem;
+    }
+    .badge {
+      font-size: 0.75rem;
+      padding: 0.2rem 0.7rem;
+      border-radius: 20px;
+      font-weight: 600;
+      color: white;
+      background: #3b82f6;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1.5rem;
+    }
+    @media (max-width: 768px) {
+      .grid {
+        grid-template-columns: 1fr;
+      }
+    }
+    .card {
+      background: white;
+      border-radius: 12px;
+      padding: 1.5rem;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+    }
+    .card h2 {
+      font-size: 1.25rem;
+      margin-bottom: 1rem;
+      border-bottom: 2px solid #e9edf2;
+      padding-bottom: 0.5rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    textarea {
+      width: 100%;
+      height: 180px;
+      padding: 0.75rem;
+      border: 2px solid #dce1e8;
+      border-radius: 8px;
+      font-size: 1rem;
+      resize: vertical;
+      font-family: inherit;
+    }
+    textarea:focus {
+      border-color: #3b82f6;
+      outline: none;
+    }
+    .toolbar {
+      display: flex;
+      gap: 0.75rem;
+      flex-wrap: wrap;
+      margin-top: 1rem;
+      align-items: center;
+    }
+    .toolbar button,
+    .toolbar label {
+      padding: 0.5rem 1rem;
+      border-radius: 8px;
+      border: 1px solid #dce1e8;
+      background: white;
+      font-size: 0.95rem;
+      cursor: pointer;
+      transition: background 0.15s;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+    }
+    .toolbar button:hover,
+    .toolbar label:hover {
+      background: #f1f5f9;
+    }
+    .toolbar button.primary {
+      background: #3b82f6;
+      color: white;
+      border: none;
+    }
+    .toolbar button.primary:hover {
+      background: #2563eb;
+    }
+    .toolbar button.primary:disabled {
+      opacity: 0.5;
+      pointer-events: none;
+    }
+    .toolbar .file-input-wrap {
+      position: relative;
+      overflow: hidden;
+    }
+    .toolbar .file-input-wrap input[type="file"] {
+      position: absolute;
+      left: 0;
+      top: 0;
+      opacity: 0;
+      width: 100%;
+      height: 100%;
+      cursor: pointer;
+    }
+    .status-bar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 1rem;
+      margin-top: 0.75rem;
+      padding: 0.5rem 0.75rem;
+      background: #f8fafc;
+      border-radius: 8px;
+      font-size: 0.9rem;
+      color: #475569;
+    }
+    .status-bar .label {
+      color: #94a3b8;
+    }
+    .status-bar .value {
+      font-weight: 600;
+      color: #0f172a;
+    }
+    .summary-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      gap: 0.75rem;
+      margin-bottom: 1rem;
+    }
+    .summary-item {
+      background: #f8fafc;
+      border-radius: 8px;
+      padding: 0.75rem;
+      text-align: center;
+      border-left: 4px solid #3b82f6;
+    }
+    .summary-item .label {
+      font-size: 0.7rem;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: #94a3b8;
+    }
+    .summary-item .value {
+      font-size: 1.5rem;
+      font-weight: 700;
+      line-height: 1.2;
+    }
+    .summary-item .sub {
+      font-size: 0.75rem;
+      color: #94a3b8;
+    }
+    .exec-summary {
+      background: #f8fafc;
+      padding: 0.75rem 1rem;
+      border-radius: 8px;
+      font-size: 0.95rem;
+      white-space: pre-wrap;
+      min-height: 70px;
+      color: #334155;
+      border-left: 3px solid #3b82f6;
+    }
+    .problems-container {
+      display: flex;
+      gap: 1.5rem;
+      margin-top: 1rem;
+      flex-wrap: wrap;
+    }
+    .problems-list {
+      flex: 2;
+      min-width: 280px;
+    }
+    .explanations-panel {
+      flex: 1;
+      min-width: 220px;
+      background: #f8fafc;
+      border-radius: 8px;
+      padding: 1rem;
+      border-left: 4px solid #3b82f6;
+    }
+    .empty-state {
+      color: #94a3b8;
+      text-align: center;
+      padding: 2rem 1rem;
+    }
+    .issue-group {
+      border: 1px solid #e9edf2;
+      border-radius: 8px;
+      margin-bottom: 0.75rem;
+      overflow: hidden;
+    }
+    .issue-group-header {
+      background: #f1f5f9;
+      padding: 0.5rem 1rem;
+      cursor: pointer;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-weight: 500;
+      transition: background 0.15s;
+    }
+    .issue-group-header:hover {
+      background: #e9edf2;
+    }
+    .issue-group-items {
+      max-height: 0;
+      overflow: hidden;
+      transition: max-height 0.25s ease;
+      padding: 0 0.75rem;
+    }
+    .issue-group-items.open {
+      max-height: 2000px;
+      padding: 0.75rem;
+    }
+    .issue-item {
+      background: white;
+      border-radius: 6px;
+      padding: 0.5rem 0.75rem;
+      margin-bottom: 0.5rem;
+      border-left: 4px solid;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    .issue-item:hover {
+      background: #f1f5f9;
+    }
+    .issue-item.active {
+      background: #dbeafe;
+    }
+    .issue-item .sentence {
+      font-style: italic;
+      font-size: 0.9rem;
+      color: #475569;
+      margin-top: 0.25rem;
+    }
+    .badge-sev {
+      font-size: 0.7rem;
+      padding: 0.15rem 0.6rem;
+      border-radius: 20px;
+      font-weight: 600;
+      color: white;
+      display: inline-block;
+    }
+    .badge-sev.critical {
+      background: #ef4444;
+    }
+    .badge-sev.high {
+      background: #f59e0b;
+    }
+    .badge-sev.medium {
+      background: #3b82f6;
+    }
+    .badge-sev.low {
+      background: #10b981;
+    }
+    .badge-sev.info {
+      background: #8b5cf6;
+    }
+    .explanation-placeholder {
+      color: #94a3b8;
+      text-align: center;
+      padding: 1.5rem 0;
+    }
+    .explanation-placeholder .icon {
+      font-size: 2.5rem;
+    }
+    .notification {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      background: white;
+      padding: 0.75rem 1.5rem;
+      border-radius: 8px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+      border-left: 4px solid #3b82f6;
+      transform: translateX(120%);
+      transition: transform 0.3s ease;
+      max-width: 380px;
+      z-index: 1000;
+      font-size: 0.95rem;
+    }
+    .notification.show {
+      transform: translateX(0);
+    }
+    .notification.error {
+      border-left-color: #ef4444;
+    }
+    .notification.warning {
+      border-left-color: #f59e0b;
+    }
+    .footer {
+      margin-top: 2rem;
+      text-align: center;
+      color: #94a3b8;
+      font-size: 0.9rem;
+      border-top: 1px solid #e9edf2;
+      padding-top: 1.5rem;
+    }
+    .example-json {
+      margin-top: 1rem;
+      background: #f1f5f9;
+      padding: 0.75rem 1rem;
+      border-radius: 8px;
+      font-size: 0.85rem;
+      font-family: monospace;
+      white-space: pre-wrap;
+      max-height: 200px;
+      overflow-y: auto;
+      color: #0f172a;
+      border: 1px solid #dce1e8;
+    }
+    .example-json summary {
+      cursor: pointer;
+      font-weight: 600;
+      color: #3b82f6;
+    }
+  </style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <div>
+      <h1>🧩 Motor de Filtrado Genérico</h1>
+      <p class="subtitle">Arquitectura hexagonal · Eventos · Persistente · Sin reglas fijas</p>
+    </div>
+    <div>
+      <span class="badge" id="statusBadge">⏳ Sin reglas</span>
+    </div>
+  </header>
+
+  <div class="grid">
+    <!-- PANEL DE ENTRADA Y CONTROLES -->
+    <div class="card">
+      <h2>📝 Entrada</h2>
+      <textarea id="inputText" placeholder="Pega aquí el texto, orden o artículo a analizar..."></textarea>
+      <div class="toolbar">
+        <button class="primary" id="analyzeBtn" disabled>🔍 Analizar</button>
+        <button id="clearBtn">🗑️ Limpiar</button>
+        <span style="flex:1; min-width: 20px;"></span>
+        <label class="file-input-wrap">
+          📂 Cargar JSON
+          <input type="file" id="fileInput" accept=".json,application/json" />
+        </label>
+        <button id="resetRulesBtn">🔄 Reiniciar reglas</button>
+      </div>
+      <div class="status-bar">
+        <span><span class="label">Perfil:</span> <span class="value" id="profileName">(ninguno)</span></span>
+        <span><span class="label">Reglas:</span> <span class="value" id="rulesCount">0</span></span>
+        <span><span class="label">Acción por defecto:</span> <span class="value" id="defaultAction">-</span></span>
+        <span><span class="label">Persistencia:</span> <span class="value" id="persistenceStatus">No guardado</span></span>
+      </div>
+      <!-- Mostrar ejemplo de JSON (plegable) -->
+      <details class="example-json">
+        <summary>📖 Ver ejemplo de estructura JSON</summary>
+        <pre>{
+  "name": "Mi perfil personalizado",
+  "version": "1.0",
+  "defaultAction": "PERMITIR",
+  "summarizer": {
+    "maxLines": 5,
+    "includeAction": true,
+    "includeMessage": true,
+    "includeContext": true
+  },
+  "rules": [
+    {
+      "id": "r001",
+      "pattern": "(hospital|quirófano)",
+      "category": "blacklist",
+      "severity": "critical",
+      "action": "BLOQUEAR",
+      "message": "Acción sobre hospital. Bloqueo automático.",
+      "override": ["orden_inmediata"]
+    }
+  ]
+}</pre>
+      </details>
+    </div>
+
+    <!-- PANEL DE RESULTADOS -->
+    <div class="card">
+      <h2>📊 Resumen ejecutivo</h2>
+      <div class="summary-grid" id="summaryContainer">
+        <div class="summary-item"><div class="label">Acción global</div><div class="value" id="globalAction">-</div><div class="sub">Esperando análisis</div></div>
+        <div class="summary-item"><div class="label">Coincidencias</div><div class="value" id="matchCount">0</div><div class="sub">reglas activadas</div></div>
+        <div class="summary-item"><div class="label">Severidad máxima</div><div class="value" id="maxSeverity">-</div><div class="sub">crítica / alta / media / baja</div></div>
+        <div class="summary-item"><div class="label">Categorías</div><div class="value" id="categoriesCount">0</div><div class="sub">tipos distintos</div></div>
+      </div>
+      <div class="exec-summary" id="executiveSummaryText">Los resultados aparecerán aquí tras el análisis.</div>
+    </div>
+  </div>
+
+  <!-- PANEL DE PROBLEMAS Y EXPLICACIONES -->
+  <div class="card" style="margin-top:1.5rem;">
+    <h2>🔎 Problemas detectados</h2>
+    <div class="problems-container">
+      <div class="problems-list" id="problemsList">
+        <div class="empty-state">Carga un JSON de reglas y ejecuta el análisis.</div>
+      </div>
+      <div class="explanations-panel" id="explanationsPanel">
+        <div class="explanation-placeholder">
+          <div class="icon">💡</div>
+          <p>Selecciona un problema para ver su explicación.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer">
+    <p>Motor de filtrado genérico · Licencia AGPL 3.0 · Sin reglas fijas · Persistencia local</p>
+  </div>
+</div>
+
+<!-- NOTIFICACIÓN -->
+<div class="notification" id="notification"><span id="notificationMessage"></span></div>
+
+<script>
+  /**
+   * =================================================================
+   * MOTOR DE FILTRADO GENÉRICO – ARQUITECTURA HEXAGONAL
+   * =================================================================
+   *
+   *  CAPAS:
+   *   1. DOMINIO   → Lógica de filtrado pura (sin dependencias externas)
+   *   2. APLICACIÓN → Orquestación, eventos, persistencia (localStorage)
+   *   3. INFRAESTRUCTURA → UI, notificaciones, carga de archivos
+   *
+   *  PRINCIPIOS:
+   *   - Sin reglas fijas en el motor.
+   *   - Configuración 100% externa vía JSON.
+   *   - Persistencia automática (localStorage).
+   *   - Eventos personalizados para desacoplar capas.
+   *   - Validación de esquema de reglas.
+   *   - Manejo robusto de errores (regex inválidos, campos faltantes).
+   * =================================================================
+   */
+
+  // ================================================================
+  // 1. CAPA DE DOMINIO (Lógica pura)
+  // ================================================================
+  const Domain = (() => {
+    /**
+     * Orden de severidad (de mayor a menor)
+     */
+    const SEVERITY_ORDER = ['critical', 'high', 'medium', 'low', 'info'];
+
+    /**
+     * Valida que un objeto sea una regla con los campos mínimos requeridos.
+     * @param {any} rule - Objeto candidato a regla.
+     * @returns {{ valid: boolean, errors: string[] }}
+     */
+    function validateRule(rule) {
+      const errors = [];
+      if (!rule.id || typeof rule.id !== 'string') errors.push('Falta "id" (string)');
+      if (!rule.pattern || typeof rule.pattern !== 'string') errors.push('Falta "pattern" (string)');
+      if (!rule.category || typeof rule.category !== 'string') errors.push('Falta "category" (string)');
+      if (!rule.severity || !SEVERITY_ORDER.includes(rule.severity)) {
+        errors.push(`"severity" debe ser uno de: ${SEVERITY_ORDER.join(', ')}`);
+      }
+      if (!rule.action || typeof rule.action !== 'string') errors.push('Falta "action" (string)');
+      if (!rule.message || typeof rule.message !== 'string') errors.push('Falta "message" (string)');
+      if (rule.override && !Array.isArray(rule.override)) {
+        errors.push('"override" debe ser un array de strings');
+      }
+      return { valid: errors.length === 0, errors };
+    }
+
+    /**
+     * Valida el esquema completo del JSON de reglas.
+     * @param {any} json - Objeto parseado del JSON.
+     * @returns {{ valid: boolean, errors: string[] }}
+     */
+    function validateSchema(json) {
+      const errors = [];
+      if (!json || typeof json !== 'object') {
+        errors.push('El JSON debe ser un objeto');
+        return { valid: false, errors };
+      }
+      if (!json.name || typeof json.name !== 'string') {
+        errors.push('Falta "name" (string)');
+      }
+      if (!json.rules || !Array.isArray(json.rules)) {
+        errors.push('Falta "rules" (array)');
+        return { valid: false, errors };
+      }
+      // Validar cada regla
+      let hasRuleErrors = false;
+      json.rules.forEach((rule, idx) => {
+        const result = validateRule(rule);
+        if (!result.valid) {
+          hasRuleErrors = true;
+          result.errors.forEach(err => {
+            errors.push(`Regla #${idx + 1} (${rule.id || 'sin id'}): ${err}`);
+          });
+        }
+      });
+      // Validar que defaultAction sea string (opcional)
+      if (json.defaultAction !== undefined && typeof json.defaultAction !== 'string') {
+        errors.push('"defaultAction" debe ser string');
+      }
+      // Validar summarizer (opcional)
+      if (json.summarizer && typeof json.summarizer !== 'object') {
+        errors.push('"summarizer" debe ser objeto');
+      }
+      return { valid: errors.length === 0 && !hasRuleErrors, errors };
+    }
+
+    /**
+     * Aplica el filtrado sobre el texto de entrada usando las reglas y configuración.
+     * @param {string} input - Texto a analizar.
+     * @param {Array} rules - Lista de reglas (objetos validados).
+     * @param {Object} config - Configuración (defaultAction, summarizer, etc.)
+     * @returns {Object} Resultado con matches, acción global, resumen y metadata.
+     */
+    function filter(input, rules, config = {}) {
+      const defaultAction = config.defaultAction || 'PERMITIR';
+      const summarizer = config.summarizer || { maxLines: 5, includeAction: true, includeMessage: true, includeContext: true };
+
+      const text = String(input);
+      const matches = [];
+      const actionsSet = new Set();
+      let maxSeverity = 'low';
+
+      // 1. Aplicar reglas
+      rules.forEach(rule => {
+        try {
+          const regex = new RegExp(rule.pattern, 'gi');
+          const matched = text.match(regex);
+          if (matched && matched.length > 0) {
+            // Extraer contexto (fragmento alrededor del primer match)
+            const firstMatch = matched[0];
+            const start = Math.max(0, text.indexOf(firstMatch) - 60);
+            const end = Math.min(text.length, text.indexOf(firstMatch) + firstMatch.length + 60);
+            const context = text.substring(start, end).trim();
+
+            matches.push({
+              rule,
+              matchedText: matched,
+              context: context || firstMatch
+            });
+            actionsSet.add(rule.action);
+            // Actualizar severidad máxima
+            const currentIdx = SEVERITY_ORDER.indexOf(rule.severity);
+            const maxIdx = SEVERITY_ORDER.indexOf(maxSeverity);
+            if (currentIdx < maxIdx) maxSeverity = rule.severity; // menor índice = mayor severidad
+          }
+        } catch (e) {
+          // Si falla la regex, se ignora la regla (notificación será manejada fuera)
+          console.warn(`[Domain] Error en regla ${rule.id}: ${e.message}`);
+        }
+      });
+
+      // 2. Aplicar anulaciones (override)
+      const finalMatches = matches.filter(match => {
+        if (match.rule.override && match.rule.override.length > 0) {
+          const overrideCats = match.rule.override;
+          // Eliminar matches de otras reglas cuya categoría esté en override
+          const shouldKeep = !matches.some(other =>
+            other.rule.id !== match.rule.id &&
+            overrideCats.includes(other.rule.category)
+          );
+          return shouldKeep;
+        }
+        return true;
+      });
+
+      // 3. Decidir acción global
+      let globalAction = defaultAction;
+      if (actionsSet.has('BLOQUEAR')) globalAction = 'BLOQUEAR';
+      else if (actionsSet.has('REQUIERE_ESPERA')) globalAction = 'REQUIERE_ESPERA';
+      else if (actionsSet.has('EXTRACT_ACTION')) globalAction = 'EXTRACT_ACTION';
+
+      // 4. Generar resumen ejecutivo
+      const summaryLines = [];
+      if (summarizer.includeAction && globalAction !== defaultAction) {
+        summaryLines.push(`⚡ Acción global: ${globalAction}`);
+      }
+      if (summarizer.includeMessage) {
+        const criticalMatches = finalMatches.filter(m => ['critical', 'high'].includes(m.rule.severity));
+        if (criticalMatches.length > 0) {
+          criticalMatches.forEach(m => {
+            summaryLines.push(`⚠️ ${m.rule.message} (${m.rule.action})`);
+          });
+        } else if (finalMatches.length > 0) {
+          finalMatches.slice(0, 2).forEach(m => {
+            summaryLines.push(`📌 ${m.rule.message} (${m.rule.action})`);
+          });
+        }
+      }
+      if (summarizer.includeContext && finalMatches.length > 0) {
+        const ctx = finalMatches[0].context;
+        summaryLines.push(`📎 Contexto: "${ctx.substring(0, 100)}${ctx.length > 100 ? '…' : ''}"`);
+      }
+
+      const summary = summaryLines.slice(0, summarizer.maxLines || 5).join('\n') || '✅ No se detectaron problemas.';
+
+      // 5. Metadata
+      const categories = [...new Set(finalMatches.map(m => m.rule.category))];
+
+      return {
+        matches: finalMatches,
+        globalAction,
+        summary,
+        metadata: {
+          totalMatches: finalMatches.length,
+          maxSeverity,
+          categories
+        }
+      };
+    }
+
+    return {
+      validateSchema,
+      validateRule,
+      filter,
+      SEVERITY_ORDER
+    };
+  })();
+
+  // ================================================================
+  // 2. CAPA DE APLICACIÓN (Orquestación, eventos, persistencia)
+  // ================================================================
+  const App = (() => {
+    // Eventos personalizados
+    const EVENTS = {
+      RULES_LOADED: 'app:rulesLoaded',
+      ANALYSIS_COMPLETED: 'app:analysisCompleted',
+      PROBLEM_SELECTED: 'app:problemSelected',
+      RULES_RESET: 'app:rulesReset'
+    };
+
+    // Suscriptores (pub/sub simple)
+    const subscribers = {};
+
+    function subscribe(event, callback) {
+      if (!subscribers[event]) subscribers[event] = [];
+      subscribers[event].push(callback);
+    }
+
+    function publish(event, data) {
+      if (subscribers[event]) {
+        subscribers[event].forEach(cb => cb(data));
+      }
+    }
+
+    // Estado interno
+    let state = {
+      currentRuleset: null,       // { name, version, defaultAction, summarizer, rules }
+      lastResult: null,
+      selectedMatchIndex: null,
+      persistenceKey: 'filterEngine_ruleset'
+    };
+
+    // ---------- Persistencia ----------
+    function saveToStorage(ruleset) {
+      try {
+        localStorage.setItem(state.persistenceKey, JSON.stringify(ruleset));
+      } catch (e) {
+        console.warn('No se pudo guardar en localStorage:', e);
+      }
+    }
+
+    function loadFromStorage() {
+      try {
+        const raw = localStorage.getItem(state.persistenceKey);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          // Validar que tenga al menos rules
+          if (parsed && parsed.rules && Array.isArray(parsed.rules)) {
+            return parsed;
+          }
+        }
+      } catch (e) { /* ignore */ }
+      return null;
+    }
+
+    function clearStorage() {
+      localStorage.removeItem(state.persistenceKey);
+    }
+
+    // ---------- Puertos de la aplicación ----------
+
+    /**
+     * Carga un conjunto de reglas desde un objeto (validado previamente).
+     * @param {Object} ruleset - Objeto con name, rules, defaultAction, summarizer, etc.
+     * @returns {boolean} true si se cargó correctamente.
+     */
+    function loadRuleset(ruleset) {
+      if (!ruleset || !ruleset.rules || !Array.isArray(ruleset.rules)) {
+        console.error('Ruleset inválido');
+        return false;
+      }
+
+      // Validar esquema
+      const validation = Domain.validateSchema(ruleset);
+      if (!validation.valid) {
+        console.error('Error de validación:', validation.errors);
+        return false;
+      }
+
+      state.currentRuleset = {
+        name: ruleset.name || 'Sin nombre',
+        version: ruleset.version || '1.0',
+        defaultAction: ruleset.defaultAction || 'PERMITIR',
+        summarizer: ruleset.summarizer || { maxLines: 5, includeAction: true, includeMessage: true, includeContext: true },
+        rules: ruleset.rules
+      };
+
+      // Persistir
+      saveToStorage(state.currentRuleset);
+
+      // Resetear resultados previos
+      state.lastResult = null;
+      state.selectedMatchIndex = null;
+
+      publish(EVENTS.RULES_LOADED, state.currentRuleset);
+      return true;
+    }
+
+    /**
+     * Restaura las reglas desde localStorage si existen.
+     * @returns {boolean} true si se restauró algo.
+     */
+    function restoreFromStorage() {
+      const stored = loadFromStorage();
+      if (stored) {
+        return loadRuleset(stored);
+      }
+      return false;
+    }
+
+    /**
+     * Reinicia el motor: borra reglas, localStorage y resetea estado.
+     */
+    function resetRules() {
+      state.currentRuleset = null;
+      state.lastResult = null;
+      state.selectedMatchIndex = null;
+      clearStorage();
+      publish(EVENTS.RULES_RESET, null);
+      publish(EVENTS.RULES_LOADED, null); // notificar que no hay reglas
+    }
+
+    /**
+     * Ejecuta el filtrado con el texto de entrada y las reglas actuales.
+     * @param {string} inputText
+     */
+    function runFilter(inputText) {
+      if (!inputText || inputText.trim().length === 0) {
+        publish(EVENTS.ANALYSIS_COMPLETED, { error: 'El texto está vacío.' });
+        return;
+      }
+
+      if (!state.currentRuleset || !state.currentRuleset.rules || state.currentRuleset.rules.length === 0) {
+        publish(EVENTS.ANALYSIS_COMPLETED, { error: 'No hay reglas cargadas.' });
+        return;
+      }
+
+      const config = {
+        defaultAction: state.currentRuleset.defaultAction,
+        summarizer: state.currentRuleset.summarizer
+      };
+
+      try {
+        const result = Domain.filter(inputText, state.currentRuleset.rules, config);
+        state.lastResult = result;
+        publish(EVENTS.ANALYSIS_COMPLETED, { result, inputText });
+      } catch (err) {
+        publish(EVENTS.ANALYSIS_COMPLETED, { error: `Error en el análisis: ${err.message}` });
+      }
+    }
+
+    /**
+     * Selecciona un problema (match) por su índice.
+     * @param {number} index
+     */
+    function selectProblem(index) {
+      if (!state.lastResult || index < 0 || index >= state.lastResult.matches.length) {
+        state.selectedMatchIndex = null;
+        publish(EVENTS.PROBLEM_SELECTED, null);
+        return;
+      }
+      state.selectedMatchIndex = index;
+      const match = state.lastResult.matches[index];
+      publish(EVENTS.PROBLEM_SELECTED, { match, index });
+    }
+
+    // Exponer API pública
+    return {
+      subscribe,
+      loadRuleset,
+      restoreFromStorage,
+      resetRules,
+      runFilter,
+      selectProblem,
+      getState: () => state
+    };
+  })();
+
+  // ================================================================
+  // 3. CAPA DE INFRAESTRUCTURA (UI, notificaciones, eventos DOM)
+  // ================================================================
+  const UI = (() => {
+    // Elementos DOM
+    const inputText = document.getElementById('inputText');
+    const analyzeBtn = document.getElementById('analyzeBtn');
+    const clearBtn = document.getElementById('clearBtn');
+    const fileInput = document.getElementById('fileInput');
+    const resetRulesBtn = document.getElementById('resetRulesBtn');
+    const statusBadge = document.getElementById('statusBadge');
+
+    const profileName = document.getElementById('profileName');
+    const rulesCount = document.getElementById('rulesCount');
+    const defaultActionEl = document.getElementById('defaultAction');
+    const persistenceStatus = document.getElementById('persistenceStatus');
+
+    const globalAction = document.getElementById('globalAction');
+    const matchCount = document.getElementById('matchCount');
+    const maxSeverity = document.getElementById('maxSeverity');
+    const categoriesCount = document.getElementById('categoriesCount');
+    const execSummaryText = document.getElementById('executiveSummaryText');
+
+    const problemsList = document.getElementById('problemsList');
+    const explanationsPanel = document.getElementById('explanationsPanel');
+
+    const notification = document.getElementById('notification');
+    const notificationMsg = document.getElementById('notificationMessage');
+
+    let notificationTimer = null;
+
+    // ---------- Notificaciones ----------
+    function showNotification(msg, type = 'info') {
+      if (notificationTimer) clearTimeout(notificationTimer);
+      notificationMsg.textContent = msg;
+      notification.className = 'notification show';
+      notification.style.borderLeftColor = type === 'error' ? '#ef4444' : type === 'warning' ? '#f59e0b' : '#3b82f6';
+      notificationTimer = setTimeout(() => {
+        notification.classList.remove('show');
+      }, 4000);
+    }
+
+    // ---------- Actualización de UI ----------
+
+    function updateStatusBar(ruleset) {
+      if (ruleset) {
+        profileName.textContent = ruleset.name || 'Sin nombre';
+        rulesCount.textContent = ruleset.rules ? ruleset.rules.length : 0;
+        defaultActionEl.textContent = ruleset.defaultAction || 'PERMITIR';
+        persistenceStatus.textContent = '✅ Guardado en localStorage';
+        statusBadge.textContent = '✅ Reglas cargadas';
+        statusBadge.style.background = '#10b981';
+        analyzeBtn.disabled = false;
+      } else {
+        profileName.textContent = '(ninguno)';
+        rulesCount.textContent = '0';
+        defaultActionEl.textContent = '-';
+        persistenceStatus.textContent = 'No guardado';
+        statusBadge.textContent = '⏳ Sin reglas';
+        statusBadge.style.background = '#f59e0b';
+        analyzeBtn.disabled = true;
+      }
+    }
+
+    function renderSummary(result) {
+      if (!result) {
+        globalAction.textContent = '-';
+        matchCount.textContent = '0';
+        maxSeverity.textContent = '-';
+        categoriesCount.textContent = '0';
+        execSummaryText.textContent = 'Los resultados aparecerán aquí tras el análisis.';
+        return;
+      }
+      globalAction.textContent = result.globalAction;
+      matchCount.textContent = result.metadata.totalMatches;
+      maxSeverity.textContent = result.metadata.maxSeverity || 'ninguna';
+      categoriesCount.textContent = result.metadata.categories.length;
+      execSummaryText.textContent = result.summary || '✅ Sin problemas detectados.';
+    }
+
+    function renderProblems(result) {
+      if (!result || result.matches.length === 0) {
+        problemsList.innerHTML = `<div class="empty-state">✅ No se detectaron problemas.</div>`;
+        return;
+      }
+
+      // Agrupar por categoría
+      const groups = {};
+      result.matches.forEach((match, idx) => {
+        const cat = match.rule.category || 'sin_categoría';
+        if (!groups[cat]) groups[cat] = [];
+        groups[cat].push({ ...match, index: idx });
+      });
+
+      let html = '';
+      for (const [cat, items] of Object.entries(groups)) {
+        html += `<div class="issue-group">`;
+        html += `<div class="issue-group-header" data-category="${cat}">
+                    <span>${cat.replace(/_/g, ' ').toUpperCase()}</span>
+                    <span class="badge-sev ${items[0].rule.severity}">${items.length}</span>
+                </div>`;
+        html += `<div class="issue-group-items">`;
+        items.forEach(item => {
+          const sev = item.rule.severity;
+          const color = {
+            critical: '#ef4444',
+            high: '#f59e0b',
+            medium: '#3b82f6',
+            low: '#10b981',
+            info: '#8b5cf6'
+          } [sev] || '#94a3b8';
+          html += `<div class="issue-item" data-index="${item.index}" style="border-left-color:${color};">
+                        <div><strong>${item.rule.message}</strong> <span class="badge-sev ${sev}">${sev}</span></div>
+                        <div class="sentence">"${item.context}"</div>
+                    </div>`;
+        });
+        html += `</div></div>`;
+      }
+
+      problemsList.innerHTML = html;
+
+      // Event listeners para abrir/cerrar grupos
+      document.querySelectorAll('.issue-group-header').forEach(header => {
+        header.addEventListener('click', function(e) {
+          const items = this.nextElementSibling;
+          if (items) {
+            items.classList.toggle('open');
+          }
+        });
+        // Abrir el primer grupo por defecto
+        if (header === document.querySelector('.issue-group-header')) {
+          const items = header.nextElementSibling;
+          if (items) items.classList.add('open');
+        }
+      });
+
+      // Event listeners para seleccionar problema
+      document.querySelectorAll('.issue-item').forEach(el => {
+        el.addEventListener('click', function() {
+          const idx = parseInt(this.dataset.index);
+          App.selectProblem(idx);
+          document.querySelectorAll('.issue-item').forEach(i => i.classList.remove('active'));
+          this.classList.add('active');
+        });
+      });
+    }
+
+    function renderExplanation(matchData) {
+      if (!matchData) {
+        explanationsPanel.innerHTML = `
+          <div class="explanation-placeholder">
+            <div class="icon">💡</div>
+            <p>Selecciona un problema para ver su explicación.</p>
+          </div>
+        `;
+        return;
+      }
+      const { match } = matchData;
+      const rule = match.rule;
+      explanationsPanel.innerHTML = `
+        <h4 style="margin-top:0;">${rule.message}</h4>
+        <p><strong>Categoría:</strong> ${rule.category}</p>
+        <p><strong>Severidad:</strong> <span class="badge-sev ${rule.severity}">${rule.severity}</span></p>
+        <p><strong>Acción sugerida:</strong> ${rule.action}</p>
+        <p><strong>Contexto:</strong> "${match.context}"</p>
+        ${rule.override && rule.override.length ? `<p><strong>Anula:</strong> ${rule.override.join(', ')}</p>` : ''}
+        <hr style="margin:1rem 0;border-color:#e9edf2;">
+        <p style="font-size:0.85rem;color:#64748b;">Patrón: <code>/${rule.pattern}/</code></p>
+      `;
+    }
+
+    // ---------- Suscripción a eventos de la aplicación ----------
+
+    App.subscribe('app:rulesLoaded', (ruleset) => {
+      updateStatusBar(ruleset);
+      // Limpiar resultados previos
+      renderSummary(null);
+      problemsList.innerHTML = `<div class="empty-state">${ruleset ? 'Reglas cargadas. Ejecuta el análisis.' : 'Carga un JSON de reglas.'}</div>`;
+      renderExplanation(null);
+      if (ruleset) {
+        showNotification(`✅ Perfil "${ruleset.name}" cargado (${ruleset.rules.length} reglas)`, 'info');
+      } else {
+        showNotification('Reglas reiniciadas.', 'info');
+      }
+    });
+
+    App.subscribe('app:analysisCompleted', (data) => {
+      if (data.error) {
+        showNotification(data.error, 'error');
+        renderSummary(null);
+        problemsList.innerHTML = `<div class="empty-state">⚠️ ${data.error}</div>`;
+        renderExplanation(null);
+        return;
+      }
+      const result = data.result;
+      renderSummary(result);
+      renderProblems(result);
+      renderExplanation(null);
+      showNotification(`Análisis completado: ${result.metadata.totalMatches} coincidencias.`, 'info');
+    });
+
+    App.subscribe('app:problemSelected', (matchData) => {
+      renderExplanation(matchData);
+    });
+
+    App.subscribe('app:rulesReset', () => {
+      // La UI se actualiza con 'rulesLoaded' (null)
+    });
+
+    // ---------- Eventos de la UI ----------
+
+    function init() {
+      // 1. Intentar restaurar desde localStorage
+      const restored = App.restoreFromStorage();
+      if (!restored) {
+        // Si no hay nada, mostrar estado vacío
+        updateStatusBar(null);
+        problemsList.innerHTML = `<div class="empty-state">Carga un archivo JSON de reglas para empezar.</div>`;
+        renderSummary(null);
+        renderExplanation(null);
+      }
+
+      // 2. Botón Analizar
+      analyzeBtn.addEventListener('click', () => {
+        const text = inputText.value;
+        App.runFilter(text);
+      });
+
+      // Ctrl+Enter
+      inputText.addEventListener('keydown', (e) => {
+        if (e.ctrlKey && e.key === 'Enter') {
+          e.preventDefault();
+          analyzeBtn.click();
+        }
+      });
+
+      // 3. Limpiar texto
+      clearBtn.addEventListener('click', () => {
+        inputText.value = '';
+        renderSummary(null);
+        problemsList.innerHTML = `<div class="empty-state">${App.getState().currentRuleset ? 'Reglas cargadas. Ejecuta el análisis.' : 'Carga un JSON de reglas.'}</div>`;
+        renderExplanation(null);
+        showNotification('Texto limpiado.', 'info');
+      });
+
+      // 4. Cargar archivo JSON
+      fileInput.addEventListener('change', function(e) {
+        const file = this.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+          try {
+            const json = JSON.parse(ev.target.result);
+            const success = App.loadRuleset(json);
+            if (success) {
+              showNotification(`✅ Archivo "${file.name}" cargado correctamente.`, 'info');
+            } else {
+              showNotification('❌ El JSON no cumple el esquema requerido.', 'error');
+            }
+          } catch (err) {
+            showNotification(`❌ Error al parsear JSON: ${err.message}`, 'error');
+          }
+          // Resetear el input para poder cargar el mismo archivo de nuevo
+          fileInput.value = '';
+        };
+        reader.readAsText(file);
+      });
+
+      // 5. Reiniciar reglas (borrar localStorage)
+      resetRulesBtn.addEventListener('click', () => {
+        if (confirm('¿Seguro que quieres eliminar las reglas cargadas?')) {
+          App.resetRules();
+          updateStatusBar(null);
+          problemsList.innerHTML = `<div class="empty-state">Carga un archivo JSON de reglas para empezar.</div>`;
+          renderSummary(null);
+          renderExplanation(null);
+          showNotification('Reglas eliminadas.', 'warning');
+        }
+      });
+
+      // 6. Análisis automático al cargar si hay texto y reglas
+      if (inputText.value.trim().length > 0 && App.getState().currentRuleset) {
+        setTimeout(() => App.runFilter(inputText.value), 400);
+      }
+    }
+
+    return { init, showNotification };
+  })();
+
+  // ================================================================
+  // 4. ARRANQUE
+  // ================================================================
+  document.addEventListener('DOMContentLoaded', () => {
+    UI.init();
+    // Exponer App y UI para depuración (opcional)
+    window.App = App;
+    window.UI = UI;
+  });
+</script>
+</body>
+</html>

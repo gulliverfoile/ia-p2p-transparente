@@ -1,0 +1,130 @@
+{
+  "name": "Analizador de Texto y Seguridad",
+  "version": "2.0",
+  "defaultAction": "PERMITIR",
+  "summarizer": {
+    "maxLines": 5,
+    "includeAction": true,
+    "includeMessage": true,
+    "includeContext": true
+  },
+  "rules": [
+    {
+      "id": "falacia_falso_dilema",
+      "pattern": "(o estás conmigo o contra mí|o lo tomas o lo dejas|no hay alternativa|blanco o negro)",
+      "category": "falacias",
+      "severity": "high",
+      "action": "DESTACAR",
+      "message": "⚖️ Falso dilema: se presentan solo dos opciones extremas.",
+      "override": []
+    },
+    {
+      "id": "falacia_pendiente_resbaladiza",
+      "pattern": "(si\\s+[^,]+\\s+entonces|terminaremos\\s+en|llevará\\s+a|inevitablemente|conducirá\\s+a)",
+      "category": "falacias",
+      "severity": "medium",
+      "action": "DESTACAR",
+      "message": "📉 Pendiente resbaladiza: se asume una cadena causal sin evidencia.",
+      "override": []
+    },
+    {
+      "id": "emocional_negativo",
+      "pattern": "(autodestructiva|desastrosa|terrible|horrible|perversa|indignante|escandalosa)",
+      "category": "emocional",
+      "severity": "medium",
+      "action": "DESTACAR",
+      "message": "😠 Lenguaje emocional negativo: puede generar rechazo irracional.",
+      "override": []
+    },
+    {
+      "id": "emocional_positivo",
+      "pattern": "(bella|hermosa|maravillosa|increíble|fantástica|perfecta|ideal)",
+      "category": "emocional",
+      "severity": "low",
+      "action": "DESTACAR",
+      "message": "😊 Lenguaje emocional positivo: puede sesgar la percepción.",
+      "override": []
+    },
+    {
+      "id": "ironia_contraste",
+      "pattern": "(bella|hermosa|maravillosa)\\s+[^.]*?\\s+(pero|sin embargo|aunque)\\s+[^.]*?(autodestructiva|desastrosa|terrible)",
+      "category": "ironia",
+      "severity": "medium",
+      "action": "DESTACAR",
+      "message": "🎭 Ironía detectada: elogio seguido de crítica (probable sarcasmo).",
+      "override": ["emocional_positivo", "emocional_negativo"]
+    },
+    {
+      "id": "propaganda_nosotros_ellos",
+      "pattern": "(nosotros|ellos|enemigos|adversarios|contrarios|los otros)",
+      "category": "propaganda",
+      "severity": "high",
+      "action": "DESTACAR",
+      "message": "👥 Nosotros vs Ellos: se crea una división binaria para movilizar.",
+      "override": []
+    },
+    {
+      "id": "propaganda_miedo",
+      "pattern": "(peligro|crisis|desastre|amenaza|catástrofe|alerta roja)",
+      "category": "propaganda",
+      "severity": "high",
+      "action": "DESTACAR",
+      "message": "😱 Apelación al miedo: se usa el temor para evitar el análisis racional.",
+      "override": []
+    },
+    {
+      "id": "framing_militar",
+      "pattern": "Operación\\s+\\w+\\s+\\w+",
+      "category": "framing_politico",
+      "severity": "medium",
+      "action": "DESTACAR",
+      "message": "🎖️ Framing militarista: se presenta la política como operación bélica.",
+      "override": []
+    },
+    {
+      "id": "metáfora_violenta",
+      "pattern": "desangrar\\s+(?:a\\s+)?las?\\s+\\w+",
+      "category": "framing_politico",
+      "severity": "high",
+      "action": "DESTACAR",
+      "message": "💉 Metáfora violenta: 'desangrar' sugiere daño físico extremo.",
+      "override": []
+    },
+    {
+      "id": "infraestructura_hospital",
+      "pattern": "(hospital|quirófano|ucis|centro de salud|clínica)",
+      "category": "seguridad_critica",
+      "severity": "critical",
+      "action": "BLOQUEAR",
+      "message": "⚠️ Acción sobre infraestructura sanitaria. Bloqueo automático.",
+      "override": ["orden_inmediata"]
+    },
+    {
+      "id": "infraestructura_nuclear",
+      "pattern": "(nuclear|central eléctrica|subestación|transformador)",
+      "category": "seguridad_critica",
+      "severity": "critical",
+      "action": "BLOQUEAR",
+      "message": "☢️ Acción sobre infraestructura energética crítica. Bloqueo automático.",
+      "override": ["orden_inmediata"]
+    },
+    {
+      "id": "restriccion_temporal",
+      "pattern": "(inmediato|ahora|urgente|sin demora|ya)",
+      "category": "restricciones",
+      "severity": "high",
+      "action": "REQUIERE_ESPERA_30S",
+      "message": "⏳ Orden urgente detectada. Se aplicará enfriamiento de 30 segundos.",
+      "override": []
+    },
+    {
+      "id": "accion_operativa",
+      "pattern": "(apagar|desconectar|reiniciar|desactivar|parar)\\s+(nodo|servidor|router|sistema)",
+      "category": "operativa",
+      "severity": "medium",
+      "action": "EXTRACT_ACTION",
+      "message": "🔧 Acción operativa detectada. Se generará resumen ejecutivo.",
+      "override": []
+    }
+  ]
+}

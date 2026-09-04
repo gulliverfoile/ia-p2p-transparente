@@ -1,0 +1,224 @@
+================================================================
+MOTOR DE FILTRADO GENÉRICO – ARQUITECTURA Y FUNCIONAMIENTO
+================================================================
+
+ Motor de Filtrado Genérico – Resumen de posibilidades y usos
+¿Qué es?
+Es un intérprete de reglas universal, sin ningún conocimiento previo, que analiza cualquier texto (artículos, órdenes, mensajes, logs, etc.) aplicando un conjunto de reglas definidas por el usuario en un archivo JSON. El motor no tiene opiniones ni sesgos; solo ejecuta lo que usted le dice que busque y cómo reaccionar.
+
+¿Cómo funciona?
+Carga un JSON con reglas (patrones, categorías, severidad, mensajes, acciones).
+
+Escribe o pega un texto en el área de entrada.
+
+El motor busca cada patrón en el texto y, si lo encuentra, registra una coincidencia con su contexto.
+
+Aplica anulaciones (override) si una regla debe prevalecer sobre otras (ej: ironía anula emociones).
+
+Devuelve:
+
+Resumen ejecutivo en texto plano.
+
+Lista de problemas agrupados por categoría.
+
+Acción global (BLOQUEAR, PERMITIR, REQUIERE_ESPERA, etc.).
+
+Explicación detallada de cada problema al hacer clic.
+
+¿Para qué sirve? (Aplicaciones prácticas)
+Ámbito	Ejemplo de uso
+Análisis de discursos políticos	Detectar falacias (falso dilema, pendiente resbaladiza), propaganda (nosotros vs ellos, miedo), ironía, framing militar, lenguaje emocional.
+Filtrado de órdenes de IA	Bloquear acciones sobre infraestructuras críticas (hospitales, centrales nucleares), aplicar tiempos de espera a órdenes urgentes, extraer acciones operativas.
+Control de calidad en redacciones	Detectar lenguaje excesivamente emocional, generalizaciones abusivas, falta de matices.
+Análisis de marketing	Identificar afirmaciones pseudocientíficas, urgencia artificial, apelaciones emocionales.
+Auditoría de comunicaciones internas	Buscar patrones de discriminación, acoso, o lenguaje inapropiado.
+Moderación de contenido	Filtrar mensajes con insultos, amenazas o contenido sensible.
+Educación y pensamiento crítico	Herramienta didáctica para que los estudiantes identifiquen sesgos y falacias en textos.
+Seguridad en sistemas	Validar que las órdenes de administración no afecten a servicios críticos sin autorización.
+Ventajas clave
+Sin reglas fijas: Usted decide qué detectar y cómo reaccionar. El motor es un lienzo en blanco.
+
+Configurable sin programar: Solo necesita editar un archivo JSON (texto) para añadir, modificar o eliminar reglas.
+
+Persistente: Las reglas se guardan en el navegador, así que no se pierden al recargar la página.
+
+Transparente: Muestra exactamente qué regla se activó, con el fragmento de texto y su contexto.
+
+Interfaz amigable: Resumen ejecutivo, problemas agrupados, explicaciones a un clic.
+
+Extensible: Puede añadir nuevos campos al JSON (ej: prioridad, color) y modificar la UI sin tocar el motor.
+
+Ejemplo concreto
+Si carga el JSON de ejemplo, al analizar la frase:
+
+"La Operación Unidad es bella pero autodestructiva. Apagar inmediatamente el nodo del hospital."
+
+El motor detectará:
+
+Framing militar (Operación Unidad).
+
+Ironía (bella pero autodestructiva).
+
+Lenguaje emocional negativo (autodestructiva).
+
+Acción urgente (inmediato).
+
+Infraestructura sanitaria (hospital) → BLOQUEAR.
+
+Y le mostrará un resumen con la acción global BLOQUEAR, junto a la lista de problemas y sus explicaciones.
+
+¿Quién puede usarlo?
+Periodistas para evaluar la objetividad de fuentes.
+
+Ingenieros de sistemas para filtrar órdenes de IA.
+
+Profesores para enseñar pensamiento crítico.
+
+Cualquier persona que quiera analizar textos de forma estructurada y personalizada.
+
+Conclusión
+Este motor es una navaja suiza para el análisis de texto: su poder reside en que usted define las reglas. Puede adaptarse a cualquier dominio donde quiera aplicar un filtro de "sentido común" o "seguridad" codificado en patrones. Y todo en un solo archivo HTML, sin dependencias, que funciona offline.
+
+1. ¿QUÉ HACE?
+-------------
+Este motor es un "intérprete de reglas" que analiza cualquier texto
+(artículos, órdenes, mensajes) aplicando un conjunto de reglas que
+usted define en un archivo JSON. El motor no tiene reglas fijas:
+todo su comportamiento depende EXCLUSIVAMENTE del JSON que cargue.
+
+El motor devuelve:
+  - Una lista de problemas detectados (cada uno con su mensaje y
+    el fragmento de texto donde se encontró).
+  - Una acción global (por ejemplo, BLOQUEAR, PERMITIR, etc.)
+  - Un resumen ejecutivo en texto plano para que el humano decida
+    rápidamente.
+
+Puede usarse para:
+  - Detectar falacias lógicas en discursos políticos.
+  - Filtrar órdenes de IA sobre infraestructuras críticas (hospitales,
+    centrales nucleares, etc.).
+  - Analizar textos de marketing, noticias, o cualquier dominio donde
+    quiera aplicar un filtro de "sentido común" codificado en reglas.
+
+2. ¿CÓMO FUNCIONA?
+------------------
+El motor sigue una arquitectura hexagonal (puertos y adaptadores)
+dividida en tres capas completamente desacopladas:
+
+  A. CAPA DE DOMINIO (lógica pura)
+     - Contiene la función `filter(input, rules, config)` que es el
+       núcleo del motor.
+     - No sabe nada de HTML, archivos o eventos.
+     - Solo aplica reglas: para cada regla, comprueba si el patrón
+       (expresión regular) aparece en el texto. Si coincide, guarda
+       el match y su contexto.
+     - Luego aplica "anulaciones" (override): si una regla dice que
+       anula ciertas categorías, elimina los matches de esas categorías
+       (ej: la ironía anula el lenguaje emocional positivo/negativo).
+     - Finalmente, decide una acción global (la más severa de todas
+       las coincidencias) y genera un resumen con los mensajes de
+       las reglas más críticas.
+
+  B. CAPA DE APLICACIÓN (orquestación, eventos, persistencia)
+     - Gestiona el estado: reglas cargadas, último resultado, etc.
+     - Guarda automáticamente las reglas en localStorage del navegador,
+       para que al recargar la página no se pierdan.
+     - Publica eventos personalizados (RULES_LOADED, ANALYSIS_COMPLETED,
+       PROBLEM_SELECTED, RULES_RESET) para que la UI se actualice sin
+       acoplamiento directo.
+
+  C. CAPA DE INFRAESTRUCTURA (UI, notificaciones, archivos)
+     - Maneja los elementos del DOM: botones, textarea, paneles.
+     - Escucha los eventos de la aplicación y actualiza la pantalla.
+     - Gestiona la carga de archivos (JSON) y muestra errores.
+
+3. FLUJO DE TRABAJO TÍPICO
+--------------------------
+1. El usuario carga un archivo JSON con reglas (botón "Cargar JSON").
+2. El motor valida el esquema (campos obligatorios, severidades válidas).
+3. Si es correcto, lo guarda en memoria y en localStorage.
+4. La UI muestra el nombre del perfil, número de reglas y acción por defecto.
+5. El usuario escribe o pega un texto en el área de entrada.
+6. Al hacer clic en "Analizar", la aplicación llama a `Domain.filter()`.
+7. El motor devuelve el resultado (matches, acción global, resumen).
+8. La UI muestra el resumen ejecutivo, la lista de problemas agrupados
+   por categoría, y un panel de explicación al hacer clic en cada problema.
+9. Si el usuario recarga la página, las reglas se restauran automáticamente
+   desde localStorage.
+
+4. ESTRUCTURA DEL JSON DE REGLAS
+--------------------------------
+El JSON debe tener el siguiente formato:
+
+{
+  "name": "Nombre del perfil",
+  "version": "1.0",
+  "defaultAction": "PERMITIR",          // acción por defecto si no hay match
+  "summarizer": {                       // controla el resumen ejecutivo
+    "maxLines": 5,
+    "includeAction": true,
+    "includeMessage": true,
+    "includeContext": true
+  },
+  "rules": [
+    {
+      "id": "identificador_unico",
+      "pattern": "expresión regular (string)",
+      "category": "nombre_categoria",
+      "severity": "critical|high|medium|low|info",
+      "action": "BLOQUEAR|REQUIERE_ESPERA|EXTRACT_ACTION|DESTACAR|...",
+      "message": "Mensaje explicativo para mostrar al humano",
+      "override": ["categoria1", "categoria2"]   // opcional: anula otras categorías
+    }
+  ]
+}
+
+5. ¿QUÉ HACE CADA CAMPO?
+------------------------
+- pattern:  Expresión regular (JavaScript) que se busca en el texto.
+- severity:  critical > high > medium > low > info.
+             Determina el orden de prioridad y la acción global.
+- action:    Puede ser cualquier string, pero el motor reconoce algunas
+             especiales para la acción global: BLOQUEAR, REQUIERE_ESPERA,
+             EXTRACT_ACTION. Si no, usa la defaultAction.
+- override:  Si una regla tiene override, elimina los matches de otras reglas
+             que pertenezcan a esas categorías. Útil para evitar dobles
+             detecciones (ej: ironía anula emocional positivo/negativo).
+
+6. EJEMPLOS DE USO
+------------------
+- Texto político: "La operación limpieza ética es bella pero autodestructiva."
+  → Detecta: framing militar, ironía, lenguaje emocional negativo.
+- Orden de IA: "Apagar inmediatamente el nodo 7 del hospital central."
+  → Detecta: restricción temporal, acción operativa, infraestructura sanitaria
+    → Acción global: BLOQUEAR (por la regla de hospital).
+
+7. PERSISTENCIA
+---------------
+Las reglas se guardan en el localStorage del navegador bajo la clave
+"filterEngine_ruleset". Al recargar la página, el motor intenta restaurarlas
+automáticamente. Si no hay nada guardado, el motor arranca sin reglas.
+
+8. EXTENSIBILIDAD
+-----------------
+El motor está diseñado para ser extendido sin tocar el núcleo:
+  - Añadir nuevas reglas es solo cuestión de modificar el JSON.
+  - La lógica de anulación (override) es configurable por regla.
+  - La UI se actualiza por eventos, por lo que se podría reemplazar
+    la interfaz gráfica sin tocar el motor (por ejemplo, usar una CLI
+    o una API REST).
+
+9. BUENAS PRÁCTICAS IMPLEMENTADAS
+---------------------------------
+- Separación de responsabilidades (Dominio / Aplicación / Infraestructura).
+- Uso de eventos personalizados para desacoplar capas.
+- Validación de esquema antes de cargar reglas.
+- Manejo robusto de errores (regex inválidas, campos faltantes).
+- Persistencia automática sin intervención del usuario.
+- Comentarios en el código (en español para facilitar la comprensión).
+- Código autocontenido en un solo HTML (sin dependencias externas).
+
+================================================================
+¡El motor es suyo! Modifique el JSON, añada reglas y adáptelo a
+cualquier dominio que necesite filtrar.
+================================================================
